@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import testMemImg from "../../assets/5d3c4f61d58fc049b8def14e6d66662b.png";
+import testMemImg from "../../assets/default-avatar-icon-of-social-media-user-vector.jpg";
 import InviteMemberModal from "../Modals/InviteMemberModal";
 import { useState } from "react";
 import axiosInstance from "../../AxiosInctance/AxiosInctance";

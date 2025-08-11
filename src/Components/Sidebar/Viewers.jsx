@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import testMemImg from "../../assets/da562fcd7191cd36e0cb665c80152064.png";
+import testMemImg from "../../assets/default-avatar-icon-of-social-media-user-vector.jpg";
 import { useQuery } from "@tanstack/react-query";
 
 

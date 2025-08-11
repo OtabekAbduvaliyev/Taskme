@@ -215,7 +215,7 @@ const InviteMemberModal = ({ isOpen, onClose }) => {
               onChange([...values, e.target.value]);
             }
           }}
-          className="flex-1 min-w-[100px] bg-transparent text-white focus:outline-none"
+          className="flex-1 min-w-[100px] bg-[#2A2A2A] text-white focus:outline-none border-none"
         >
           <option value="">Add...</option>
           {options
@@ -232,8 +232,6 @@ const InviteMemberModal = ({ isOpen, onClose }) => {
 
   // Hide workspace multi-select if view is ALL
   const showWorkspaceSelect = view !== "ALL";
-
-
 
   return ReactDOM.createPortal(
     <AnimatePresence>

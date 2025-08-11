@@ -6,8 +6,11 @@ import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { Draggable } from "react-beautiful-dnd";
 import { AuthContext } from "../../../../Auth/AuthContext";
-import { useContext } from "react";
-import testMemImg from "../../../../assets/5d3c4f61d58fc049b8def14e6d66662b.png"; // Add this import if not present
+import { useState, useContext } from "react";
+import testMemImg from "../../../../assets/default-avatar-icon-of-social-media-user-vector.jpg"
+import { IoMdChatbubbles } from "react-icons/io";
+import axiosInstance from "../../../../AxiosInctance/AxiosInctance";
+import { IoClose } from "react-icons/io5";
 
 const SheetTableItem = ({
   task,
@@ -17,9 +20,9 @@ const SheetTableItem = ({
   index,
   isSelected,
   onSelect,
+  stickyFirstThreeColumns, // new prop
+  onChatIconClick, // new prop
 }) => {
-  const { members } = useContext(AuthContext);
-
   const handleInputChange = (taskKey, e) => {
     let value = e?.target?.value;
 
@@ -42,6 +45,45 @@ const SheetTableItem = ({
     }
 
     onChange(task.id, taskKey, value);
+  };
+
+  const { members: companyMembers } = useContext(AuthContext);
+  const [showMemberModal, setShowMemberModal] = useState(false);
+  const [selectedMemberIds, setSelectedMemberIds] = useState([]);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Open modal and set selected members to current task members
+  const handleOpenMemberModal = () => {
+    setSelectedMemberIds((task?.members || []).map((m) => m.id));
+    setShowMemberModal(true);
+  };
+
+  // Toggle member selection
+  const handleToggleMember = (memberId) => {
+    setSelectedMemberIds((prev) =>
+      prev.includes(memberId)
+        ? prev.filter((id) => id !== memberId)
+        : [...prev, memberId]
+    );
+  };
+
+  // Save selected members to task
+  const handleSaveMembers = async () => {
+    if (!task?.id) return;
+    setIsSaving(true);
+    try {
+      const token = localStorage.getItem("token");
+      await axiosInstance.patch(
+        `/task/${task.id}`,
+        { members: selectedMemberIds },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      // Optionally update UI or refetch tasks here
+      setShowMemberModal(false);
+    } catch {
+      // Optionally show error
+    }
+    setIsSaving(false);
   };
 
   const renderField = (columnKey, columnType, column) => {
@@ -96,14 +138,38 @@ const SheetTableItem = ({
       const checked = !!task[lowerKey];
       return (
         <div className="flex items-center justify-center w-full">
-          <input
-            type="checkbox"
-            checked={checked}
-            onChange={(e) =>
-              handleInputChange(lowerKey, { target: { value: e.target.checked } })
-            }
-            className="w-5 h-5 accent-pink2 bg-[#23272F] border-[#3A3A3A] rounded focus:ring-pink2"
-          />
+          <label className="relative flex items-center cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={checked}
+              onChange={(e) =>
+                handleInputChange(lowerKey, { target: { value: e.target.checked } })
+              }
+              className="peer appearance-none w-5 h-5 m-0 p-0 absolute opacity-0 cursor-pointer"
+              style={{ zIndex: 2 }}
+            />
+            <span
+              className={`
+                w-5 h-5 rounded border-2 flex items-center justify-center
+                transition-colors duration-150
+                ${checked ? "bg-pink2 border-pink2" : "bg-[#23272F] border-[#3A3A3A]"}
+                peer-focus:ring-2 peer-focus:ring-pink2
+              `}
+              style={{ zIndex: 1 }}
+            >
+              {checked && (
+                <svg
+                  className="w-3 h-3 text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+            </span>
+          </label>
         </div>
       );
     }
@@ -203,30 +269,101 @@ const SheetTableItem = ({
     }
 
     // Member avatars
-    if (lowerKey === "member") {
-      if (!members || members.length === 0) {
-        return (
-          <div className="flex items-center justify-center w-full h-full">
-            <FaUserSlash className="text-gray4 w-[22px] h-[22px]" title="No members exist" />
-          </div>
-        );
-      }
+    if (lowerKey === "members") {
+      const taskMembers = Array.isArray(task.members) ? task.members : [];
       return (
-        <div className="flex items-center -space-x-4">
-          {members.map((member, index) => (
-            <img
-              key={member.id}
-              src={
-                member.user.avatar?.path
-                  ? `https://eventify.preview.uz/${member.user.avatar?.path}`
-                  : testMemImg
-              }
-              alt={member.user.firstName || "Member Image"}
-              className="w-[30px] h-[30px] 2xl:w-[35px] 2xl:h-[35px] rounded-full object-cover border-2 border-[#1a1a2e]"
-              style={{ zIndex: members.length - index }}
-            />
-          ))}
-        </div>
+        <>
+          <div
+            className="flex items-center -space-x-4 cursor-pointer"
+            onClick={handleOpenMemberModal}
+            title="Edit members"
+          >
+            {taskMembers.length === 0 ? (
+              <FaUserSlash className="text-gray4 w-[22px] h-[22px]" title="No members exist" />
+            ) : (
+              taskMembers.map((member, index) => (
+                <img
+                  key={member.id}
+                  src={
+                    member.user?.avatar?.path
+                      ? `https://eventify.preview.uz/${member.user.avatar.path}`
+                      : testMemImg
+                  }
+                  alt={member.user?.firstName || "Member Image"}
+                  className="w-[30px] h-[30px] 2xl:w-[35px] 2xl:h-[35px] rounded-full object-cover border-2 border-[#1a1a2e]"
+                  style={{ zIndex: taskMembers.length - index }}
+                  title={member.user?.firstName || ""}
+                />
+              ))
+            )}
+          </div>
+          {showMemberModal && (
+            <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black bg-opacity-40">
+              <div className="bg-grayDash rounded-lg shadow-lg p-6 w-[340px] max-w-full">
+                <div className="flex justify-between items-center mb-4">
+                  <div className="font-bold text-lg text-white">
+                    Select Members
+                  </div>
+                  <button
+                    className="text-gray4 hover:text-pink2 text-xl"
+                    onClick={() => setShowMemberModal(false)}
+                  >
+                    <IoClose />
+                  </button>
+                </div>
+                <div className="max-h-[260px] overflow-y-auto mb-4">
+                  {!companyMembers || companyMembers.length === 0 ? (
+                    <div className="text-gray4 text-center py-6">
+                      No company members found.
+                    </div>
+                  ) : (
+                    companyMembers.map((member) => (
+                      <label
+                        key={member.id}
+                        className="flex items-center gap-3 py-2 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedMemberIds.includes(member.id)}
+                          onChange={() => handleToggleMember(member.id)}
+                          className="accent-pink2 w-5 h-5"
+                        />
+                        <img
+                          src={
+                            member.user?.avatar?.path
+                              ? `https://eventify.preview.uz/${member.user.avatar.path}`
+                              : testMemImg
+                          }
+                          alt={member.user?.firstName || "Member"}
+                          className="w-7 h-7 rounded-full object-cover border-2 border-[#23272F]"
+                        />
+                        <span className="text-white">
+                          {member.user?.firstName || "NoName"}{" "}
+                          {member.user?.lastName || ""}
+                        </span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button
+                    className="px-4 py-2 rounded bg-gray3 text-white"
+                    onClick={() => setShowMemberModal(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="px-4 py-2 rounded bg-pink2 text-white font-semibold disabled:opacity-60"
+                    onClick={handleSaveMembers}
+                    disabled={isSaving}
+                  >
+                    {isSaving ? "Saving..." : "Save"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       );
     }
 
@@ -250,36 +387,62 @@ const SheetTableItem = ({
           {...provided.draggableProps}
           {...provided.dragHandleProps}
         >
-          <td className="w-[48px] py-[16px] px-[11px] flex items-center justify-center border-r border-r-[black] sticky left-0 bg-grayDash z-10">
+          {/* Sticky checkbox cell */}
+          <td className="w-[48px] py-[16px] px-[11px] flex items-center justify-center border-r border-r-[black] sticky left-0 bg-grayDash z-20">
+            <label className="relative flex items-center cursor-pointer select-none w-[20px] h-[20px]">
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  onSelect && onSelect(task.id);
+                }}
+                className="peer appearance-none w-5 h-5 m-0 p-0 absolute opacity-0 cursor-pointer"
+                style={{ zIndex: 2 }}
+              />
+              <span
+                className={`
+                  w-5 h-5 rounded border-2 flex items-center justify-center
+                  transition-colors duration-150
+                  ${isSelected ? "bg-pink2 border-pink2" : "bg-[#23272F] border-[#3A3A3A]"}
+                  peer-focus:ring-2 peer-focus:ring-pink2
+                `}
+                style={{ zIndex: 1 }}
+              >
+                {isSelected && (
+                  <svg
+                    className="w-3 h-3 text-white"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </span>
+            </label>
+          </td>
+          {/* Sticky chat cell */}
+          <td className="chat w-[48px] py-[16px] px-[11px] flex items-center justify-center border-r border-r-[black] sticky left-[48px] bg-grayDash z-20">
             <div
+              className="cursor-pointer w-[20px] h-[20px] flex items-center justify-center"
               onClick={(e) => {
                 e.stopPropagation();
-                onSelect && onSelect(task.id);
+                onChatIconClick && onChatIconClick(task);
               }}
-              className="cursor-pointer w-[20px] h-[20px] flex items-center justify-center"
             >
-              {isSelected ? (
-                <RiCheckboxLine
-                  className="text-pink2 w-[20px] h-[20px]"
-                  style={{ strokeWidth: "0.5" }}
-                />
-              ) : (
-                <RiCheckboxBlankLine
-                  className="text-gray4 w-[20px] h-[20px]"
-                  style={{ strokeWidth: "0.5" }}
-                />
-              )}
+              <IoMdChatbubbles className="text-gray4 w-[30px] h-[30px]" />
             </div>
           </td>
-
           {columns?.map(
             (column, idx) =>
               column.show && (
                 <td
                   key={idx}
                   className={`w-[180px] flex items-center justify-between py-[16px] border-r border-r-[black] px-[11px]${
-                    columns.filter(c => c.show).findIndex((c, i) => i === idx) === 0
-                      ? " sticky left-[48px] z-10 bg-grayDash"
+                    stickyFirstThreeColumns && idx === 0
+                      ? " sticky left-[96px] z-10 bg-grayDash"
                       : ""
                   }`}
                   onClick={() => onEdit && onEdit()}

@@ -2,7 +2,6 @@
 import React, { useEffect, useState } from "react";
 import { useStripe, useElements, CardElement, Elements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
-import { useNavigate } from "react-router-dom";
 
 const stripePromise = loadStripe("pk_test_51Q1Q38CNk2DfIGoIzTj4YnJhQWRk1UnlyOJBpFJQFn9R1Inl4YI3z3lqU6LiADg6q8mIHgDR18QVlbEIrdlLlk6200F6fLd9Zs");
 
@@ -33,7 +32,7 @@ const handleSubmit = async (e) => {
 
   try {
     // 1) Create payment intent
-    const createRes = await fetch("http://localhost:4000/api/v1/payment/inline", {
+    const createRes = await fetch("https://eventify.preview.uz/api/v1/payment/inline", {
       method: "POST",
       headers: { 
         "Content-Type": "application/json",
@@ -66,7 +65,7 @@ const handleSubmit = async (e) => {
 
     if (result.paymentIntent && result.paymentIntent.status === "succeeded") {
       // 4) Notify backend to confirm subscription
-      await fetch("http://localhost:4000/api/v1/payment/inline/confirm", {
+      await fetch("https://eventify.preview.uz/api/v1/payment/inline/confirm", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -135,7 +134,6 @@ const Subscriptions = () => {
   const [message, setMessage] = useState("");
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [modalPlan, setModalPlan] = useState(null);
-  const navigate = useNavigate();
 
   useEffect(() => {
     fetch("https://eventify.preview.uz/api/v1/plan")
@@ -249,7 +247,6 @@ const Subscriptions = () => {
                 setMessage("Payment succeeded — subscription active!");
                 setShowPaymentModal(false);
                 setModalPlan(null);
-                navigate("/dashboard");
               }}
               onCancel={() => {
                 setShowPaymentModal(false);

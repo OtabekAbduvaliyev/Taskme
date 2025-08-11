@@ -1,10 +1,18 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { FiX } from "react-icons/fi";
 import { MdOutlineCheckCircle, MdOutlineError } from "react-icons/md";
 
 const Toast = ({ isOpen, type = "success", message, onClose }) => {
+  useEffect(() => {
+    if (!isOpen) return;
+    const timer = setTimeout(() => {
+      onClose && onClose();
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [isOpen, onClose]);
+
   return createPortal(
     <AnimatePresence>
       {isOpen && (

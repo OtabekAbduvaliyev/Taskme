@@ -9,18 +9,14 @@ import { IoAddCircleOutline } from "react-icons/io5";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import SheetTableItem from "./SheetsSmallComps/SheetTableItem";
 import CustomModal from "./SheetsSmallComps/CustomModal";
-import { IoIosArrowForward } from "react-icons/io";
-import noDataImage from "../../../assets/no-data.svg";
-import Selecter from "../../../Components/Pagination and selecter/Selecter";
-import { GoFileSymlinkFile } from "react-icons/go";
-import { FaRegTrashAlt } from "react-icons/fa";
-import { IoClose } from "react-icons/io5";
+import { IoMdChatbubbles } from "react-icons/io";
 import AnimatedNoData from "./SheetsSmallComps/AnimatedNoData";
 import swal from "sweetalert";
 import { AnimatePresence, motion } from "framer-motion";
 import DeleteConfirmationModal from "../../Modals/DeleteConfirmationModal";
 import { Dropdown, Menu } from "antd";
 import { MdEdit, MdDelete } from "react-icons/md";
+import TaskChatSidebar from "./SheetsSmallComps/TaskChatSidebar";
 
 const SheetTabel = ({
   tasks = [],
@@ -59,6 +55,8 @@ const SheetTabel = ({
   const [isDeleteColumnModalOpen, setIsDeleteColumnModalOpen] = useState(false);
   const [isDeleteTaskModalOpen, setIsDeleteTaskModalOpen] = useState(false);
   const [tasksToDelete, setTasksToDelete] = useState([]);
+  const [chatSidebarOpen, setChatSidebarOpen] = useState(false);
+  const [chatTask, setChatTask] = useState(null);
   const token = localStorage.getItem("token");
   const { createColumn, dndOrdersTasks } = useContext(AuthContext);
 
@@ -108,10 +106,16 @@ const SheetTabel = ({
         const [movedTask] = reorderedTasks.splice(source.index, 1);
         reorderedTasks.splice(destination.index, 0, movedTask);
 
-        setFilteredTasks(reorderedTasks);
+        // Update order property locally
+        const reorderedWithOrder = reorderedTasks.map((task, idx) => ({
+          ...task,
+          order: idx + 1,
+        }));
 
-        const taskIds = reorderedTasks.map((task) => task.id);
-        const orders = reorderedTasks.map((_, index) => index + 1);
+        setFilteredTasks(reorderedWithOrder);
+
+        const taskIds = reorderedWithOrder.map((task) => task.id);
+        const orders = reorderedWithOrder.map((task) => task.order);
 
         const resultData = { taskId: taskIds, orders };
         dndOrdersTasks(resultData);
@@ -241,7 +245,15 @@ const SheetTabel = ({
   // Calculate pagination
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const paginatedTasks = filteredTasks.slice(indexOfFirstItem, indexOfLastItem);
+
+  // Sort filteredTasks by order before paginating
+  const sortedFilteredTasks = [...filteredTasks].sort((a, b) => {
+    if (typeof a.order === "number" && typeof b.order === "number") {
+      return a.order - b.order;
+    }
+    return 0;
+  });
+  const paginatedTasks = sortedFilteredTasks.slice(indexOfFirstItem, indexOfLastItem);
 
   // Modified function to handle task deletion without page reload
 
@@ -319,6 +331,18 @@ const SheetTabel = ({
     </Menu>
   );
 
+  // Handler to open chat sidebar
+  const handleOpenChatSidebar = (task) => {
+    setChatTask(task);
+    setChatSidebarOpen(true);
+  };
+
+  // Handler to close chat sidebar
+  const handleCloseChatSidebar = () => {
+    setChatSidebarOpen(false);
+    setChatTask(null);
+  };
+
   if (isLoading) {
     return (
       <div className="mt-[26px]">
@@ -381,24 +405,46 @@ const SheetTabel = ({
               <tr className="flex border-[black] border-b">
                 {/* Sticky checkbox header cell */}
                 <td
-                  className="w-[48px] py-[16px] px-[11px] flex items-center justify-center border-r border-r-[black] cursor-pointer bg-grayDash sticky left-0 z-20 top-0"
+                  className="w-[48px] py-[16px] px-[11px] flex items-center justify-center border-r border-r-[black] cursor-pointer bg-grayDash sticky left-0 z-30 top-0"
                   onClick={handleSelectAllTasks}
                 >
-                  <div className="w-[20px] h-[20px] flex items-center justify-center">
-                    {selectedTasks.length === filteredTasks.length ? (
-                      <RiCheckboxLine
-                        className="text-pink2 w-[20px] h-[20px]"
-                        style={{ strokeWidth: "0.5" }}
-                      />
-                    ) : (
-                      <RiCheckboxBlankLine
-                        className="text-gray4 w-[20px] h-[20px]"
-                        style={{ strokeWidth: "0.5" }}
-                      />
-                    )}
+                  <label className="relative flex items-center cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={selectedTasks.length === filteredTasks.length}
+                      readOnly
+                      className="peer appearance-none w-5 h-5 m-0 p-0 absolute opacity-0 cursor-pointer"
+                      style={{ zIndex: 2 }}
+                    />
+                    <span
+                      className={`
+                        w-5 h-5 rounded border-2 flex items-center justify-center
+                        transition-colors duration-150
+                        ${selectedTasks.length === filteredTasks.length ? "bg-pink2 border-pink2" : "bg-[#23272F] border-[#3A3A3A]"} peer-focus:ring-2 peer-focus:ring-pink2
+                      `}
+                      style={{ zIndex: 1 }}
+                    >
+                      {selectedTasks.length === filteredTasks.length && (
+                        <svg
+                          className="w-3 h-3 text-white"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="3"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </span>
+                  </label>
+                </td>
+                <td
+                  className="w-[48px] py-[16px] px-[11px] flex items-center justify-center border-r border-r-[black] cursor-pointer bg-grayDash sticky left-[48px] z-30 top-0"
+                >
+                  <div className="chat w-[25px] h-[25px] flex items-center justify-center">
+                    <IoMdChatbubbles className="text-gray4 w-[30px] h-[30px]" />
                   </div>
                 </td>
-
                 {/* Draggable Columns + Sticky Add Button */}
                 <td className="flex-grow">
                   <Droppable
@@ -414,7 +460,7 @@ const SheetTabel = ({
                       >
                         {sheets?.columns.map((column, index) => {
                           const showColumn = column.show;
-                          // Make the first column sticky
+                          // Make the first data column sticky (third column overall)
                           const isFirst = index === 0;
                           return (
                             showColumn && (
@@ -431,7 +477,7 @@ const SheetTabel = ({
                                   >
                                     <div
                                       className={`w-[180px] flex items-center justify-between py-[16px] border-r border-[black] px-[11px] hide
-                                        ${isFirst ? "sticky left-[48px] bg-grayDash top-0 " : ""}
+                                        ${isFirst ? "sticky left-[96px] bg-grayDash top-0 z-20" : ""}
                                       `}
                                       ref={provided.innerRef}
                                       {...provided.draggableProps}
@@ -468,9 +514,6 @@ const SheetTabel = ({
                 <tbody ref={provided.innerRef} {...provided.droppableProps}>
                   {paginatedTasks?.map((task, index) => (
                     <tr key={task.id} className="flex border-b border-black ">
-                      {/* Sticky checkbox cell in row */}
-                      {/* Task data cells */}
-                      {/* Render SheetTableItem, but make the first column sticky */}
                       <SheetTableItem
                         task={task}
                         columns={sheets?.columns.filter((_, idx) =>
@@ -481,7 +524,8 @@ const SheetTabel = ({
                         onSelect={handleTaskSelect}
                         onEdit={() => setEditingTaskId(task.id)}
                         onChange={handleColumnChange}
-                        stickyFirstColumn // <-- pass a prop to SheetTableItem to handle sticky style
+                        stickyFirstThreeColumns // <-- pass a prop to SheetTableItem to handle sticky style for first three columns
+                        onChatIconClick={() => handleOpenChatSidebar(task)}
                       />
                     </tr>
                   ))}
@@ -492,6 +536,13 @@ const SheetTabel = ({
           </table>
         </div>
       </DragDropContext>
+      {/* Chat Sidebar */}
+      <TaskChatSidebar
+        isOpen={chatSidebarOpen}
+        onClose={handleCloseChatSidebar}
+        task={chatTask}
+        initialMembers={chatTask?.members || []}
+      />
     </div>
   );
 };

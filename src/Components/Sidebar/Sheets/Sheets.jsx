@@ -29,6 +29,7 @@ import SheetCalendar from "./SheetCalendar";
 import DeleteConfirmationModal from "../../../Components/Modals/DeleteConfirmationModal";
 import Selecter from "../../Pagination and selecter/Selecter";
 import MoveTaskModal from "../../../Components/Modals/MoveTaskModal";
+import Toast from "../../../Components/Modals/Toast";
 
 const Sheets = () => {
   const { id } = useParams(); // workspace ID
@@ -145,27 +146,35 @@ const Sheets = () => {
       disabled: false,
     },
   ];
+const credentails = {
+  key: "name",
+  value: searchQuery
+};
 
-  const {
-    isLoading: taskLoading,
-    error: errorTask,
-    data,
-    refetch: taskRefetch,
-  } = useQuery({
-    queryKey: ["tasks", sheetId, searchQuery],
-    queryFn: async () => {
-      // If searchQuery is empty, don't send the key param
-      const url = searchQuery.trim()
-        ? `/task/${sheetId}?key=${encodeURIComponent(searchQuery)}`
-        : `/task/${sheetId}`;
-      return await axiosInstance.get(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-    },
-    enabled: !!sheetId,
-  });
+const {
+  isLoading: taskLoading,
+  error: errorTask,
+  data,
+  refetch: taskRefetch,
+} = useQuery({
+  queryKey: ["tasks", sheetId, searchQuery],
+  queryFn: async () => {
+    const url = `task/${sheetId}`;
+    return await axiosInstance.get(url, {
+      // params: {
+      //   search: "key"
+      // },
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+  },
+  // ✅ will only call if sheetId exists AND searchQuery is not empty
+  enabled: !!sheetId 
+});
+
+console.log(data);
+
 
   const [isCreatingTask, setIsCreatingTask] = useState(false);
 
@@ -209,6 +218,11 @@ const Sheets = () => {
   const handleSheetCreated = (newSheet) => {
     if (newSheet && newSheet.id) {
       navigate(`/dashboard/workspace/${id}/${newSheet.id}`);
+      setToast({
+        isOpen: true,
+        type: "success",
+        message: "Sheet created successfully!",
+      });
     }
   };
 
@@ -248,8 +262,22 @@ const Sheets = () => {
     refetch();
   };
 
+  // Add this toast state definition
+  const [toast, setToast] = useState({
+    isOpen: false,
+    type: "success",
+    message: "",
+  });
+
   return (
     <>
+      {/* Toast Notification */}
+      <Toast
+        isOpen={toast.isOpen}
+        type={toast.type}
+        message={toast.message}
+        onClose={() => setToast((prev) => ({ ...prev, isOpen: false }))}
+      />
       {/* Delete Confirmation Modal for sheets */}
       <DeleteConfirmationModal
         isOpen={deleteModalOpen}
@@ -330,7 +358,7 @@ const Sheets = () => {
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3, ease: "easeInOut" }}
                 className="sheetActions flex gap-[14px] items-center justify-between pb-[12px] 2xl:pb-[20px]  sticky mt-[12px] 2xl:mt-[20px] top-[70px] "
-                // top-[70px] may need adjustment depending on tabs height
+              // top-[70px] may need adjustment depending on tabs height
               >
                 <div className="flex gap-[18px]">
                   <div className="newProject">

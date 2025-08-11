@@ -18,7 +18,7 @@ const ColumnType = {
   NUMBER: "NUMBER",
   DATE: "DATE",
   CHECK: "CHECK",
-  MEMEBERS:"MEMBER",
+  MEMEBERS:"MEMBERS",
 };
 
 const CreateSheetFormModal = ({
@@ -78,7 +78,7 @@ const CreateSheetFormModal = ({
       sheetId: sheetId,
     },
     {
-      name: "Member",
+      name: "Members",
       type: ColumnType.MEMEBERS,
       show: true,
       isDefault: true,
