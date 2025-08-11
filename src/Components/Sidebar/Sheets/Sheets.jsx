@@ -216,16 +216,25 @@ const Sheets = () => {
   const [selectedTasks, setSelectedTasks] = useState([]);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
-  const [isMoveModalOpen, setIsMoveModalOpen] = useState(false); // <-- add this
+  const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
+
+  // Add state for task delete confirmation modal
+  const [isDeleteTaskModalOpen, setIsDeleteTaskModalOpen] = useState(false);
 
   // LIFTED: handleMoveTask
   const handleMoveTask = () => {
     if (selectedTasks.length === 1) {
-      setIsMoveModalOpen(true); // <-- open modal from parent
+      setIsMoveModalOpen(true);
     }
   };
 
-  const handleDeleteTasks = async () => {
+  // Change handleDeleteTasks to open modal
+  const handleDeleteTasks = () => {
+    setIsDeleteTaskModalOpen(true);
+  };
+
+  // Confirm delete handler
+  const confirmDeleteTasks = async () => {
     for (const taskId of selectedTasks) {
       await axiosInstance.delete(`/task/${taskId}`, {
         headers: {
@@ -234,12 +243,14 @@ const Sheets = () => {
       });
     }
     setSelectedTasks([]);
+    setIsDeleteTaskModalOpen(false);
+    setCurrentPage(1);
     refetch();
   };
 
   return (
     <>
-      {/* Delete Confirmation Modal */}
+      {/* Delete Confirmation Modal for sheets */}
       <DeleteConfirmationModal
         isOpen={deleteModalOpen}
         onClose={() => {
@@ -249,6 +260,14 @@ const Sheets = () => {
         onDelete={() => sheetToDelete && handleDelete(sheetToDelete)}
         title="Delete Sheet"
         message="Are you sure you want to delete this sheet? This action cannot be undone."
+      />
+      {/* Delete Confirmation Modal for tasks */}
+      <DeleteConfirmationModal
+        isOpen={isDeleteTaskModalOpen}
+        onClose={() => setIsDeleteTaskModalOpen(false)}
+        onDelete={confirmDeleteTasks}
+        title="Delete Task(s)"
+        message="Are you sure you want to delete the selected task(s)? This action cannot be undone."
       />
       <div className=" h-[calc(100vh-40px)] flex flex-col relative">
         <AnimatePresence mode="wait">
