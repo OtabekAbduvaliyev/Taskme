@@ -4,12 +4,13 @@ import { BsThreeDotsVertical } from "react-icons/bs";
 import { IoAddCircleOutline } from "react-icons/io5";
 import { AuthContext } from "../../Auth/AuthContext";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQuery as useRQ } from "@tanstack/react-query";
 import axiosInstance from "../../AxiosInctance/AxiosInctance";
 import { MdDelete, MdEdit } from "react-icons/md";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import WorkspaceFormModal from "../Modals/WorkspaceFormModal";
 import DeleteConfirmationModal from "../Modals/DeleteConfirmationModal";
+import Toast from "../Modals/Toast";
 
 const Workspaces = ({user}) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -25,6 +26,28 @@ const Workspaces = ({user}) => {
   const [selectedRole, setSelectedRole] = useState(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [workspaceToDelete, setWorkspaceToDelete] = useState(null);
+  const [toast, setToast] = useState({
+    isOpen: false,
+    type: "success",
+    message: "",
+  });
+
+  // Fetch current plan
+  const {
+    data: currentPlan,
+    isLoading: planLoading,
+    error: planError,
+  } = useRQ({
+    queryKey: ["currentPlan"],
+    queryFn: async () => {
+      const response = await axiosInstance.get("/company/current-plan", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return response.data;
+    },
+    staleTime: 300000,
+  });
+
   const {
     isLoading,
     error,
@@ -82,9 +105,19 @@ const Workspaces = ({user}) => {
           { name: workspaceName.name, order: editingWorkspaceOrder },
           { headers: { Authorization: `Bearer ${token}` } }
         );
+        setToast({
+          isOpen: true,
+          type: "success",
+          message: "Workspace updated successfully!",
+        });
       } else {
         const newWorkspace = await createWorkspace(workspaceName);
         if (newWorkspace && newWorkspace.id) {
+          setToast({
+            isOpen: true,
+            type: "success",
+            message: "Workspace created successfully!",
+          });
           navigate(`/dashboard/workspace/${newWorkspace.id}`);
         }
       }
@@ -92,6 +125,11 @@ const Workspaces = ({user}) => {
       handleToggleModal();
       refetch();
     } catch (error) {
+      setToast({
+        isOpen: true,
+        type: "error",
+        message: "Error creating/updating workspace.",
+      });
       console.error("Error creating/updating workspace:", error);
     }
   }, [
@@ -115,8 +153,18 @@ const Workspaces = ({user}) => {
       await refetch();
       setDeleteModalOpen(false);
       setWorkspaceToDelete(null);
+      setToast({
+        isOpen: true,
+        type: "success",
+        message: "Workspace deleted successfully!",
+      });
       // After refetch, the useEffect above will handle redirection if needed
     } catch (error) {
+      setToast({
+        isOpen: true,
+        type: "error",
+        message: "Error deleting workspace.",
+      });
       console.error("Error deleting workspace:", error);
     }
   };
@@ -214,8 +262,23 @@ const Workspaces = ({user}) => {
      // Only run when user changes
      // eslint-disable-next-line react-hooks/exhaustive-deps
    }, [user]);
+
+  // Determine workspace add eligibility
+  const workspaceLimitReached =
+    currentPlan &&
+    typeof currentPlan.maxWorkspaces === "number" &&
+    workspacesData &&
+    workspacesData.length >= currentPlan.maxWorkspaces;
+
   return (
     <div className="bg-grayDash py-[16px] px-[17px] rounded-[17px] font-radioCanada mt-[18px] shadow-xl">
+      {/* Toast Notification */}
+      <Toast
+        isOpen={toast.isOpen}
+        type={toast.type}
+        message={toast.message}
+        onClose={() => setToast((prev) => ({ ...prev, isOpen: false }))}
+      />
       {/* Delete Confirmation Modal */}
       <DeleteConfirmationModal
         isOpen={deleteModalOpen}
@@ -308,24 +371,36 @@ const Workspaces = ({user}) => {
         </DragDropContext>
       )}
       {/* Add workspace button */}
-      {selectedRole?.type !== 'MEMBER' ? ( <div className="addWorkspacebutton">
-        <button
-          className="flex items-center gap-0 text-white px-[19px] bg-white w-full justify-between py-[10px] rounded-[9px]"
-          onClick={handleToggleModal}
-        >
-          <IoAddCircleOutline className="text-gray4 text-[18px]" />
-          <p className="text-gray4 text-[14px]">
-            {workspacesData && workspacesData.length === 0
-              ? "Create first Workspace"
-              : "Add worklist"}
-          </p>
-          {workspacesData && workspacesData.length > 0 && (
-            <p className="text-pink2 text-[13px]">Pro+</p>
+      {selectedRole?.type !== 'MEMBER' ? (
+        <div className="addWorkspacebutton">
+          <button
+            className="flex items-center gap-0 text-white px-[19px] bg-white w-full justify-between py-[10px] rounded-[9px]"
+            onClick={handleToggleModal}
+            disabled={workspaceLimitReached}
+          >
+            <IoAddCircleOutline className="text-gray4 text-[18px]" />
+            <p className="text-gray4 text-[14px]">
+              {workspacesData && workspacesData.length === 0
+                ? "Create first Workspace"
+                : "Add worklist"}
+            </p>
+            {currentPlan && currentPlan.name === "Pro" && (
+              workspaceLimitReached ? (
+                <p className="text-pink2 text-[13px]">Pro+ (limit reached)</p>
+              ) : (
+                <p className="text-pink2 text-[13px]">Pro+</p>
+              )
+            )}
+          </button>
+          {workspaceLimitReached && (
+            <p className="text-red-400 text-xs mt-1">
+              Workspace limit reached for your plan ({currentPlan.maxWorkspaces}). Upgrade to add more.
+            </p>
           )}
-        </button>
-      </div>) : (
+        </div>
+      ) : (
         <div></div>
-        )}
+      )}
     </div>
   );
 };

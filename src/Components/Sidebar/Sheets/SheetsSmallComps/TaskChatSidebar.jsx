@@ -1,4 +1,4 @@
-import React, { useState, useContext, useEffect } from "react";
+import React, { useState, useContext, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { IoClose } from "react-icons/io5";
 import testMemImg from "../../../../assets/default-avatar-icon-of-social-media-user-vector.jpg";
@@ -25,6 +25,9 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
     const [socket, setSocket] = useState(null);
     const [messageInput, setMessageInput] = useState("");
     const [userId, setUserId] = useState(null);
+    const messagesEndRef = useRef(null); // Add ref for auto-scroll
+    const chatContainerRef = useRef(null); // Ref for chat container
+    const [showScrollButton, setShowScrollButton] = useState(false);
     console.log(messages);
     
     // Keep members in sync with task prop
@@ -80,7 +83,7 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
 
             socketInstance.on("connect", () => console.log("Connected to chat"));
             socketInstance.on(`messagesInChat${task.chat.id}`, setMessages);
-            socketInstance.on(`onlineUsersInChat${task.id}`, setOnlineUsers);
+            socketInstance.on(`onlineUsersInChat${task.chat.id}`, setOnlineUsers);
             socketInstance.on("newMessage", (msg) => {
                 setMessages((prev) => [...prev, msg]);
             });
@@ -113,6 +116,35 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
         };
         fetchUserId();
     }, []);
+
+    // Auto-scroll to bottom when messages change
+    useEffect(() => {
+        if (messagesEndRef.current) {
+            messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+        }
+    }, [messages]);
+
+    // Show scroll-to-bottom button if user is not at the bottom
+    useEffect(() => {
+        const chatDiv = chatContainerRef.current;
+        if (!chatDiv) return;
+        const handleScroll = () => {
+            const threshold = 80; // px from bottom
+            const atBottom =
+                chatDiv.scrollHeight - chatDiv.scrollTop - chatDiv.clientHeight < threshold;
+            setShowScrollButton(!atBottom);
+        };
+        chatDiv.addEventListener("scroll", handleScroll);
+        // Initial check
+        handleScroll();
+        return () => chatDiv.removeEventListener("scroll", handleScroll);
+    }, [isOpen, messages.length]);
+
+    const handleScrollToBottom = () => {
+        if (messagesEndRef.current) {
+            messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+        }
+    };
 
     return (
         <AnimatePresence>
@@ -241,7 +273,10 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                         </div>
                     )}
                     {/* Chat messages */}
-                    <div className="flex-1 overflow-y-auto px-4 py-4 bg-[#23272F] custom-scrollbar">
+                    <div
+                        className="flex-1 overflow-y-auto px-4 py-4 bg-[#23272F] custom-scrollbar relative"
+                        ref={chatContainerRef}
+                    >
                         {messages.length === 0 ? (
                             <div className="text-gray4 text-center mt-10">
                                 <p>No chat messages yet.</p>
@@ -304,7 +339,26 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                                         </div>
                                     );
                                 })}
+                                <div ref={messagesEndRef} /> {/* Auto-scroll anchor */}
                             </div>
+                        )}
+                        {showScrollButton && (
+                            <button
+                                onClick={handleScrollToBottom}
+                                className="fixed right-8 bottom-32 z-[10001] bg-pink2 text-white rounded-full shadow-lg p-2 hover:bg-pink-600 transition"
+                                style={{
+                                    boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                                    opacity: showScrollButton ? 1 : 0,
+                                    transform: showScrollButton ? "translateY(0)" : "translateY(20px)",
+                                    pointerEvents: showScrollButton ? "auto" : "none",
+                                    transition: "opacity 0.3s, transform 0.3s"
+                                }}
+                                title="Scroll to bottom"
+                            >
+                                <svg width="22" height="22" fill="none" viewBox="0 0 24 24">
+                                    <path d="M12 19V5M12 19l7-7M12 19l-7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                            </button>
                         )}
                     </div>
                     {/* Message input & online users */}
