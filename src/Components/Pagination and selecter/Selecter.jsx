@@ -5,7 +5,7 @@ import { GoFileSymlinkFile } from 'react-icons/go';
 import { IoIosArrowForward } from 'react-icons/io';
 import { IoClose } from 'react-icons/io5';
 
-const Selecter = ({ selectedTasks, setItemsPerPage, setCurrentPage,itemsPerPage,currentPage,filteredTasks,setSelectedTasks,handleMoveTask,setDeleteModalOpen,isHidden }) => {
+const Selecter = ({ selectedTasks, setItemsPerPage, setCurrentPage,itemsPerPage,currentPage,filteredTasks,setSelectedTasks,handleMoveTask,setDeleteModalOpen,isHidden, handleDeleteTasks }) => {
 
   
   return (
@@ -44,7 +44,7 @@ const Selecter = ({ selectedTasks, setItemsPerPage, setCurrentPage,itemsPerPage,
                       </div>
                       <div
                         className="delete text-[#C6C8D6] cursor-pointer hover:text-pink2"
-                        onClick={() => setDeleteModalOpen(true)}
+                        onClick={() => handleDeleteTasks()}
                       >
                         <FaRegTrashAlt className="m-auto" />
                         <p className="text-[12px]">Delete</p>

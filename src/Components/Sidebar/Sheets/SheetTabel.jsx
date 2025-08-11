@@ -57,6 +57,8 @@ const SheetTabel = ({
   });
   const [columnToDelete, setColumnToDelete] = useState(null);
   const [isDeleteColumnModalOpen, setIsDeleteColumnModalOpen] = useState(false);
+  const [isDeleteTaskModalOpen, setIsDeleteTaskModalOpen] = useState(false);
+  const [tasksToDelete, setTasksToDelete] = useState([]);
   const token = localStorage.getItem("token");
   const { createColumn, dndOrdersTasks } = useContext(AuthContext);
 
@@ -242,48 +244,36 @@ const SheetTabel = ({
   const paginatedTasks = filteredTasks.slice(indexOfFirstItem, indexOfLastItem);
 
   // Modified function to handle task deletion without page reload
-  const handleDeleteSelectedTasks = async () => {
+
+  // Task delete handler
+  const handleDeleteTasks = () => {
+    setTasksToDelete(selectedTasks);
+    setIsDeleteTaskModalOpen(true);
+  };
+
+  const confirmDeleteTasks = async () => {
+    if (!tasksToDelete.length) return;
     try {
-      // Delete tasks one by one asynchronously
-      for (const taskId of selectedTasks) {
-        try {
-          await axiosInstance.delete(`/task/${taskId}`, {
+      // Delete each task by ID
+      await Promise.all(
+        tasksToDelete.map((taskId) =>
+          axiosInstance.delete(`/task/${taskId}`, {
             headers: {
               Authorization: `Bearer ${token}`,
             },
-          });
-          // Update both selectedTasks and filteredTasks arrays
-          setSelectedTasks((prev) => prev.filter((id) => id !== taskId));
-          setFilteredTasks((prev) => prev.filter((task) => task.id !== taskId));
-          setTaskList((prev) => prev.filter((task) => task.id !== taskId));
-        } catch (error) {
-          console.error(`Error deleting task ${taskId}:`, error);
-        }
-      }
-      setDeleteModalOpen(false);
-    } catch (error) {
-      console.error("Error in deletion process:", error);
+          })
+        )
+      );
+      // Remove deleted tasks from filteredTasks
+      setFilteredTasks((prev) =>
+        prev.filter((task) => !tasksToDelete.includes(task.id))
+      );
+      setSelectedTasks([]);
+    } catch (err) {
+      // Optionally handle error
     }
-  };
-
-  // Calculate total pages
-  const totalPages = Math.ceil(filteredTasks.length / itemsPerPage);
-
-  const handleMoveTaskLocal = () => {
-    if (handleMoveTask) {
-      handleMoveTask();
-    }
-  };
-
-  const handleTaskMoved = (taskId) => {
-    // Remove the moved task from the list
-    setTaskList((prevTasks) => prevTasks.filter((task) => task.id !== taskId));
-    setFilteredTasks((prevTasks) =>
-      prevTasks.filter((task) => task.id !== taskId)
-    );
-    setSelectedTasks((prevSelected) =>
-      prevSelected.filter((id) => id !== taskId)
-    );
+    setIsDeleteTaskModalOpen(false);
+    setTasksToDelete([]);
   };
 
   // Column edit/delete handlers
@@ -363,6 +353,17 @@ const SheetTabel = ({
         onDelete={confirmDeleteColumn}
         title="Delete Column"
         message="Are you sure you want to delete this column? This action cannot be undone."
+      />
+      {/* Delete Confirmation Modal for tasks */}
+      <DeleteConfirmationModal
+        isOpen={isDeleteTaskModalOpen}
+        onClose={() => {
+          setIsDeleteTaskModalOpen(false);
+          setTasksToDelete([]);
+        }}
+        onDelete={confirmDeleteTasks}
+        title="Delete Task(s)"
+        message="Are you sure you want to delete the selected task(s)? This action cannot be undone."
       />
       <CustomModal
         isOpen={isOpen}

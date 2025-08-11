@@ -225,6 +225,18 @@ const Sheets = () => {
     }
   };
 
+  const handleDeleteTasks = async () => {
+    for (const taskId of selectedTasks) {
+      await axiosInstance.delete(`/task/${taskId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    }
+    setSelectedTasks([]);
+    refetch();
+  };
+
   return (
     <>
       {/* Delete Confirmation Modal */}
@@ -433,6 +445,7 @@ const Sheets = () => {
                         setFilteredTasks={setFilteredTasks}
                         isMoveModalOpen={isMoveModalOpen}
                         setIsMoveModalOpen={setIsMoveModalOpen}
+                        handleDeleteTasks={handleDeleteTasks}
                       />
                     )}
                     {view === "list" && <SheetList tasks={tasks} />}
@@ -454,6 +467,7 @@ const Sheets = () => {
                 handleMoveTask={handleMoveTask}
                 setDeleteModalOpen={setDeleteModalOpen}
                 isHidden={false}
+                handleDeleteTasks={handleDeleteTasks}
               />
             </div>)}
             {/* MoveTaskModal rendered at parent level */}

@@ -101,7 +101,7 @@ const Viewers = ({ role }) => {
             </div>
           ))
         ) : (
-          <p className="text-gray2 text-sm mt-2 text-white">No viewer members found.</p>
+          <div className="text-gray2 text-center py-4">No viewers found</div>
         )}
 
       </div>) : (
