@@ -163,38 +163,32 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                             <span className="font-bold text-lg text-white">
                                 {task?.name || "Task Chat"}
                             </span>
-                            <div className="flex -space-x-3">
+                            <div
+                                className="flex items-center -space-x-4 cursor-pointer"
+                                onClick={handleOpenMemberModal}
+                                title="Edit members"
+                                style={{ minHeight: "32px" }}
+                            >
                                 {(!members || members.length === 0) ? (
-                                    <span
-                                        className="cursor-pointer"
-                                        onClick={handleOpenMemberModal}
-                                    >
-                                        <FaUserSlash
-                                            className="text-gray4 w-7 h-7"
-                                            title="No members exist"
-                                        />
-                                    </span>
+                                    <FaUserSlash
+                                        className="text-gray4 w-7 h-7"
+                                        title="No members exist"
+                                    />
                                 ) : (
-                                    <span
-                                        className="flex"
-                                        onClick={handleOpenMemberModal}
-                                        style={{ cursor: "pointer" }}
-                                        title="Edit members"
-                                    >
-                                        {members.map((member) => (
-                                            <img
-                                                key={member.id}
-                                                src={
-                                                    member.user?.avatar?.path
-                                                        ? `https://eventify.preview.uz/${member.user.avatar.path}`
-                                                        : testMemImg
-                                                }
-                                                alt={member.user?.firstName || "Member"}
-                                                className="w-8 h-8 rounded-full border-2 border-[#23272F] object-cover"
-                                                title={member.user?.firstName || ""}
-                                            />
-                                        ))}
-                                    </span>
+                                    members.map((member, index) => (
+                                        <img
+                                            key={member.id}
+                                            src={
+                                                member.user?.avatar?.path
+                                                    ? `https://eventify.preview.uz/${member.user.avatar.path}`
+                                                    : testMemImg
+                                            }
+                                            alt={member.user?.firstName || "Member"}
+                                            className="w-8 h-8 rounded-full border-2 border-[#23272F] object-cover"
+                                            style={{ zIndex: members.length - index }}
+                                            title={member.user?.firstName || ""}
+                                        />
+                                    ))
                                 )}
                             </div>
                         </div>
@@ -409,4 +403,5 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
 };
 
 export default TaskChatSidebar;
+
 
