@@ -284,9 +284,10 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                                     return (
                                         <div
                                             key={idx}
-                                            className={`flex items-end gap-2 ${isOwn ? "justify-start" : "justify-end"}`}
+                                            className={`flex items-end gap-2 ${isOwn ? "justify-end" : "justify-start"}`}
                                         >
-                                            {isOwn && (
+                                            {/* Other's avatar on left */}
+                                            {!isOwn && (
                                                 <img
                                                     src={
                                                         m.user?.avatar?.path
@@ -297,13 +298,13 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                                                     className="w-8 h-8 rounded-full border-2 border-[#23272F] object-cover"
                                                 />
                                             )}
-                                            <div className={`flex flex-col max-w-[70%] ${isOwn ? "items-start" : "items-end"}`}>
+                                            <div className={`flex flex-col max-w-[70%] ${isOwn ? "items-end" : "items-start"}`}>
                                                 <div
                                                     className={`
                                                         px-4 py-2 rounded-2xl
                                                         ${isOwn
-                                                            ? "bg-[#353945] text-white rounded-bl-none"
-                                                            : "bg-[#2A2D36] text-white rounded-br-none"
+                                                            ? "bg-[#353945] text-white rounded-br-none"
+                                                            : "bg-[#2A2D36] text-white rounded-bl-none"
                                                         }
                                                         shadow
                                                     `}
@@ -319,7 +320,8 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                                                     {dayjs(m.createdAt).format("HH:mm, MMM D")}
                                                 </span>
                                             </div>
-                                            {!isOwn && (
+                                            {/* Own avatar on right */}
+                                            {isOwn && (
                                                 <img
                                                     src={
                                                         m.user?.avatar?.path

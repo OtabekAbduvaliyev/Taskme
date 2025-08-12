@@ -125,6 +125,30 @@ const Settings = ({ onClose }) => {
     }
   };
 
+  // Upgrade tab: fetch plans and current plan
+  const [plans, setPlans] = useState([]);
+  const [currentPlan, setCurrentPlan] = useState(null);
+  const [plansLoading, setPlansLoading] = useState(true);
+
+  useEffect(() => {
+    if (activeTab !== "upgrade") return;
+    const token = localStorage.getItem("token");
+    setPlansLoading(true);
+    Promise.all([
+      axiosInstance.get("/company/current-plan", {
+        headers: { Authorization: `Bearer ${token}` }
+      }),
+      axiosInstance.get("/plan", {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+    ])
+      .then(([currentRes, plansRes]) => {
+        setCurrentPlan(currentRes.data);
+        setPlans(Array.isArray(plansRes.data) ? plansRes.data : []);
+      })
+      .finally(() => setPlansLoading(false));
+  }, [activeTab]);
+
   const tabContent = {
     profile: (
       <div className="space-y-6 py-3">
@@ -297,6 +321,63 @@ const Settings = ({ onClose }) => {
           Change Password
         </button>
       </div>
+    ),
+    upgrade: (
+      <div className="space-y-6 py-3">
+        <h2 className="text-2xl font-bold text-white mb-4">Upgrade Plan</h2>
+        <p className="text-[#C4E1FE] mb-6">
+          Unlock more features and increase your limits by upgrading your plan.
+        </p>
+        {plansLoading ? (
+          <div className="text-white2 mb-6">Loading plans...</div>
+        ) : (
+          <div>
+            <div className="mb-4">
+              <span className="font-semibold text-white">Current Plan: </span>
+              <span className="text-pink2 font-bold">
+                {currentPlan?.name || "Unknown"}
+              </span>
+            </div>
+            <div className="flex flex-col gap-6">
+              {plans.map(plan => (
+                <div
+                  key={plan.id}
+                  className={`w-full rounded-xl p-6 border-2 ${
+                    plan.name === currentPlan?.name
+                      ? "border-pink2 bg-pink2/10"
+                      : "border-gray4 bg-[#23272F]"
+                  } flex flex-col items-start`}
+                >
+                  <div className="text-xl font-bold text-white mb-1">{plan.name}</div>
+                  <div className="text-pink2 text-2xl font-extrabold mb-2">
+                    {plan.price === 0 ? "Free" : `$${plan.price}/mo`}
+                  </div>
+                  <div className="text-white2 text-sm mb-2">{plan.description}</div>
+                  <ul className="text-xs text-white2 mb-3 text-left w-full list-disc pl-4">
+                    <li>Max Workspaces: {plan.maxWorkspaces}</li>
+                    <li>Max Sheets: {plan.maxSheets}</li>
+                    <li>Max Tasks: {plan.maxTasks}</li>
+                    <li>Max Members: {plan.maxMembers}</li>
+                    <li>Max Viewers: {plan.maxViewers}</li>
+                  </ul>
+                  {plan.name === currentPlan?.name ? (
+                    <span className="px-4 py-1 rounded bg-pink2 text-white font-semibold text-xs">
+                      Current Plan
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => navigate('/subscriptions')}
+                      className="mt-2 px-4 py-2 bg-pink2 text-white rounded-lg font-semibold hover:bg-pink transition"
+                    >
+                      Upgrade
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     )
   };
 
@@ -341,6 +422,7 @@ const Settings = ({ onClose }) => {
               {[
                 { id: 'profile', icon: FiUser, label: 'Profile' },
                 { id: 'security', icon: FiLock, label: 'Security' },
+                { id: 'upgrade', icon: FiBriefcase, label: 'Upgrade' }
               ].map(tab => (
                 <button
                   key={tab.id}

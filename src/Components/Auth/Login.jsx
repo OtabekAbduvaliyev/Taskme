@@ -9,8 +9,9 @@ import { FiEye, FiEyeOff } from "react-icons/fi";
 
 const Login = () => {
   const [credentials, setCredentials] = useState({ email: "", password: "" });
-  const { login, loading } = useContext(AuthContext);
+  const { login, loading, restoreAccount } = useContext(AuthContext);
   const [showPassword, setShowPassword] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
 
   const handleChange = (e) => {
     setCredentials({ ...credentials, [e.target.name]: e.target.value });
@@ -19,6 +20,18 @@ const Login = () => {
   const handleSubmit = (e) => {
     e.preventDefault();
     login(credentials);
+  };
+
+  // Handle forgot password click
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    if (!credentials.email) {
+      // Optionally show a toast or error here
+      return;
+    }
+    setForgotLoading(true);
+    await restoreAccount({ email: credentials.email });
+    setForgotLoading(false);
   };
 
   return (
@@ -63,12 +76,15 @@ const Login = () => {
                 >
                   Password
                 </label>
-                <Link
-                  to="/reset-password"
-                  className="text-pink2 text-sm font-medium hover:underline"
+                {/* Changed from Link to button */}
+                <button
+                  type="button"
+                  className="text-pink2 text-sm font-medium hover:underline disabled:opacity-60"
+                  onClick={handleForgotPassword}
+                  disabled={forgotLoading || !credentials.email}
                 >
-                  Forgot Password?
-                </Link>
+                  {forgotLoading ? "Sending..." : "Forgot Password?"}
+                </button>
               </div>
               <div className="relative group">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#777C9D] group-hover:text-pink2 transition-colors">

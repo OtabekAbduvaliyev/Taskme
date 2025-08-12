@@ -30,6 +30,7 @@ import DeleteConfirmationModal from "../../../Components/Modals/DeleteConfirmati
 import Selecter from "../../Pagination and selecter/Selecter";
 import MoveTaskModal from "../../../Components/Modals/MoveTaskModal";
 import Toast from "../../../Components/Modals/Toast";
+import UpgradePlanModal from "../../Modals/UpgradePlanModal";
 
 const Sheets = () => {
   const { id } = useParams(); // workspace ID
@@ -41,6 +42,7 @@ const Sheets = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [sheetToDelete, setSheetToDelete] = useState(null);
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const token = localStorage.getItem("token");
   const navigate = useNavigate();
   const { createTask } = useContext(AuthContext);
@@ -269,6 +271,30 @@ console.log(data);
     message: "",
   });
 
+  // Fetch current plan for sheet limit
+  const {
+    data: currentPlan,
+    isLoading: planLoading,
+    error: planError,
+  } = useQuery({
+    queryKey: ["currentPlan"],
+    queryFn: async () => {
+      const response = await axiosInstance.get("/company/current-plan", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return response.data;
+    },
+    staleTime: 300000,
+  });
+
+  // Determine sheet add eligibility
+  const sheetLimitReached =
+    currentPlan &&
+    typeof currentPlan.maxSheets === "number" &&
+    sheets &&
+    sheets.sheets &&
+    sheets.sheets.length >= currentPlan.maxSheets;
+
   return (
     <>
       {/* Toast Notification */}
@@ -296,6 +322,11 @@ console.log(data);
         onDelete={confirmDeleteTasks}
         title="Delete Task(s)"
         message="Are you sure you want to delete the selected task(s)? This action cannot be undone."
+      />
+      <UpgradePlanModal
+        isOpen={upgradeModalOpen}
+        onClose={() => setUpgradeModalOpen(false)}
+        message="You have reached the sheet limit for your current plan. Please upgrade your plan to add more sheets."
       />
       <div className=" h-[calc(100vh-40px)] flex flex-col relative">
         <AnimatePresence mode="wait">
@@ -341,10 +372,15 @@ console.log(data);
                   </Dropdown>
                 </Link>
               ))}
-
               <div
                 className="sheet flex items-center gap-[6px] bg-grayDash rounded-[9px] hover:bg-gray transition-all duration-1000 px-[6px] py-[7px] cursor-pointer"
-                onClick={handleToggleModal}
+                onClick={() => {
+                  if (sheetLimitReached) {
+                    setUpgradeModalOpen(true);
+                  } else {
+                    handleToggleModal();
+                  }
+                }}
               >
                 <IoAddCircleOutline className="text-[20px]" />
               </div>

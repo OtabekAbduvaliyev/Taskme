@@ -11,6 +11,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import WorkspaceFormModal from "../Modals/WorkspaceFormModal";
 import DeleteConfirmationModal from "../Modals/DeleteConfirmationModal";
 import Toast from "../Modals/Toast";
+import UpgradePlanModal from "../Modals/UpgradePlanModal";
 
 const Workspaces = ({user}) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -31,6 +32,7 @@ const Workspaces = ({user}) => {
     type: "success",
     message: "",
   });
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
 
   // Fetch current plan
   const {
@@ -47,6 +49,7 @@ const Workspaces = ({user}) => {
     },
     staleTime: 300000,
   });
+console.log(currentPlan);
 
   const {
     isLoading,
@@ -375,8 +378,14 @@ const Workspaces = ({user}) => {
         <div className="addWorkspacebutton">
           <button
             className="flex items-center gap-0 text-white px-[19px] bg-white w-full justify-between py-[10px] rounded-[9px]"
-            onClick={handleToggleModal}
-            disabled={workspaceLimitReached}
+            onClick={() => {
+              if (workspaceLimitReached) {
+                setUpgradeModalOpen(true);
+              } else {
+                handleToggleModal();
+              }
+            }}
+            disabled={false}
           >
             <IoAddCircleOutline className="text-gray4 text-[18px]" />
             <p className="text-gray4 text-[14px]">
@@ -384,12 +393,11 @@ const Workspaces = ({user}) => {
                 ? "Create first Workspace"
                 : "Add worklist"}
             </p>
-            {currentPlan && currentPlan.name === "Pro" && (
-              workspaceLimitReached ? (
-                <p className="text-pink2 text-[13px]">Pro+ (limit reached)</p>
-              ) : (
-                <p className="text-pink2 text-[13px]">Pro+</p>
-              )
+            {currentPlan && (
+              <p className="text-pink2 text-[13px]">
+                {currentPlan.name}
+                {workspaceLimitReached ? " (limit reached)" : ""}
+              </p>
             )}
           </button>
           {workspaceLimitReached && (
@@ -397,6 +405,11 @@ const Workspaces = ({user}) => {
               Workspace limit reached for your plan ({currentPlan.maxWorkspaces}). Upgrade to add more.
             </p>
           )}
+          <UpgradePlanModal
+            isOpen={upgradeModalOpen}
+            onClose={() => setUpgradeModalOpen(false)}
+            message="You have reached the workspace limit for your current plan. Please upgrade your plan to add more workspaces."
+          />
         </div>
       ) : (
         <div></div>
