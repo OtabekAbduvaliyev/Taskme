@@ -70,12 +70,7 @@ const Sheets = () => {
     enabled: !!id,
   });
 
-  useEffect(() => {
-    if (sheets?.sheets.length && !sheetId) {
-      // Navigate to the first sheet if sheetId is not provided
-      navigate(`/dashboard/workspace/${id}/${sheets.sheets[0].id}`);
-    }
-  }, [sheets, sheetId, id, navigate]);
+  // Do not auto-navigate to the first sheet; only navigate on explicit actions (e.g., after creation)
 
   const handleToggleModal = useCallback(async () => {
     setIsOpen((prev) => !prev);
@@ -197,7 +192,7 @@ console.log(data);
       // endDate: "Jan 19,2034",
     };
     await createTask(newTask);
-    taskRefetch();
+    await taskRefetch();
     setIsCreatingTask(false);
   };
 
@@ -205,7 +200,19 @@ console.log(data);
 
   useEffect(() => {
     if (data?.data?.tasks) {
-      setFilteredTasks(data.data.tasks);
+      // Sort tasks so newest is first (by createdAt or id desc)
+      setFilteredTasks(
+        [...data.data.tasks].sort((a, b) => {
+          if (a.createdAt && b.createdAt) {
+            return new Date(b.createdAt) - new Date(a.createdAt);
+          }
+          // fallback: sort by id desc (assuming id is numeric or string with numbers)
+          if (!isNaN(Number(a.id)) && !isNaN(Number(b.id))) {
+            return Number(b.id) - Number(a.id);
+          }
+          return String(b.id).localeCompare(String(a.id));
+        })
+      );
     }
   }, [data?.data?.tasks]);
 
@@ -339,7 +346,7 @@ console.log(data);
             className="flex flex-col h-full"
           >
             {/* 1. Sheet Tabs - sticky top */}
-            <div className="sheets mt-[27px] text-white gap-[10px] flex sticky top-0  pb-2">
+            <div className="sheets mt-[20px] sm:mt-[24px] md:mt-[27px] text-white gap-[8px] sm:gap-[10px] flex sticky top-0 pb-2 overflow-x-auto custom-scrollbar">
               <CreateSheetFormModal
                 handleToggleModal={handleToggleModal}
                 isOpen={isOpen}
@@ -354,7 +361,7 @@ console.log(data);
                 <Link
                   key={sheet.id}
                   to={`/dashboard/workspace/${id}/${sheet.id}`}
-                  className="sheet flex items-center gap-[6px] hover:bg-gray transition-all duration-1000 bg-grayDash rounded-[9px] pl-[12px] pr-[6px] py-[6px] inline-flex cursor-pointer"
+                  className="sheet flex items-center gap-[6px] hover:bg-gray transition-all duration-1000 bg-grayDash rounded-[9px] pl-[10px] sm:pl-[12px] pr-[6px] py-[6px] inline-flex cursor-pointer text-[13px] sm:text-[14px]"
                 >
                   <p>{!sheet.name == "" ? sheet.name : "Untitled"}</p>
                   <Dropdown
@@ -382,7 +389,7 @@ console.log(data);
                   }
                 }}
               >
-                <IoAddCircleOutline className="text-[20px]" />
+                <IoAddCircleOutline className="text-[18px] sm:text-[20px]" />
               </div>
             </div>
             {/* 2. Sheet Actions - sticky below tabs */}
@@ -393,53 +400,53 @@ console.log(data);
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3, ease: "easeInOut" }}
-                className="sheetActions flex gap-[14px] items-center justify-between pb-[12px] 2xl:pb-[20px]  sticky mt-[12px] 2xl:mt-[20px] top-[70px] "
+                className="sheetActions flex gap-[12px] sm:gap-[14px] items-center justify-between pb-[10px] sm:pb-[12px] 2xl:pb-[20px] sticky mt-[10px] sm:mt-[12px] 2xl:mt-[20px] top-[70px] flex-wrap"
               // top-[70px] may need adjustment depending on tabs height
               >
-                <div className="flex gap-[18px]">
+                <div className="flex gap-[12px] sm:gap-[18px] w-full sm:w-auto">
                   <div className="newProject">
                     <button
-                      className="flex bg-white py-[11.5px] px-[12px] items-center rounded-[9px] text-pink2 gap-[10px]"
+                      className="flex bg-white py-[10px] sm:py-[11.5px] px-[10px] sm:px-[12px] items-center rounded-[9px] text-pink2 gap-[8px] sm:gap-[10px]"
                       onClick={addNewTask}
                     >
-                      <IoAddCircleOutline className="text-[22px]" />
-                      <p className="font-[500] text-[14px]">New project</p>
+                      <IoAddCircleOutline className="text-[20px] sm:text-[22px]" />
+                      <p className="font-[500] text-[13px] sm:text-[14px]">New project</p>
                     </button>
                   </div>
                   <div className="search inputsr">
                     <Input
-                      prefix={<IoSearch className="text-[21px]" />}
+                      prefix={<IoSearch className="text-[18px] sm:text-[21px]" />}
                       placeholder="Search..."
                       value={searchQuery}
                       onChange={handleSearch}
-                      className="bg-grayDash font-radioCanada text-[14px] hover:bg-grayDash outline-none text-white active:bg-grayDash focus:bg-grayDash overflow-hidden border-none w-[210px] h-[46px]"
+                      className="bg-grayDash font-radioCanada text-[13px] sm:text-[14px] hover:bg-grayDash outline-none text-white active:bg-grayDash focus:bg-grayDash overflow-hidden border-none w-[180px] sm:w-[210px] h-[42px] sm:h-[46px]"
                     />
                   </div>
                 </div>
-                <div className="items-center flex gap-[16px] ">
+                <div className="items-center flex gap-[12px] sm:gap-[16px] w-full sm:w-auto justify-end">
                   <div
                     className={`text-white flex items-center gap-[6px] hover:cursor-pointer ${view === "table" ? "font-bold underline" : ""
                       }`}
                     onClick={() => setView("table")}
                   >
                     <BsTable />
-                    <p>Table</p>
+                    <p className="text-[13px] sm:text-[14px]">Table</p>
                   </div>
                   <div
                     className={`text-white flex items-center gap-[6px] hover:cursor-pointer ${view === "list" ? "font-bold underline" : ""
                       }`}
                     onClick={() => setView("list")}
                   >
-                    <FaListUl className="text-[18px]" />
-                    <p>List</p>
+                    <FaListUl className="text-[16px] sm:text-[18px]" />
+                    <p className="text-[13px] sm:text-[14px]">List</p>
                   </div>
                   <div
                     className={`text-white flex items-center gap-[6px] hover:cursor-pointer ${view === "calendar" ? "font-bold underline" : ""
                       }`}
                     onClick={() => setView("calendar")}
                   >
-                    <IoMdCalendar className="text-[21px]" />
-                    <p>Calendar</p>
+                    <IoMdCalendar className="text-[18px] sm:text-[21px]" />
+                    <p className="text-[13px] sm:text-[14px]">Calendar</p>
                   </div>
                 </div>
               </motion.div>
@@ -447,22 +454,7 @@ console.log(data);
             {/* 3. Task View - scrollable middle */}
             <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 mt-[10px] mb-[20px] rounded-[12px]">
               <AnimatePresence mode="wait">
-                {isCreatingTask ? (
-                  <motion.div
-                    key="creating"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="mt-[26px]"
-                  >
-                    <div className="animate-pulse bg-grayDash rounded-[12px] h-[100px] flex items-center justify-center">
-                      <div className="text-gray4 text-[20px] font-radioCanada">
-                        Creating...
-                      </div>
-                    </div>
-                  </motion.div>
-                ) : isLoading ? (
+                {isLoading ? (
                   <motion.div
                     key="loading"
                     initial={{ opacity: 0 }}
@@ -529,10 +521,21 @@ console.log(data);
                         isMoveModalOpen={isMoveModalOpen}
                         setIsMoveModalOpen={setIsMoveModalOpen}
                         handleDeleteTasks={handleDeleteTasks}
+                        isCreatingTask={isCreatingTask} // Pass loading state to table
                       />
                     )}
-                    {view === "list" && <SheetList tasks={tasks} />}
-                    {view === "calendar" && <SheetCalendar tasks={tasks} />}
+                    {view === "list" && (
+                      <div className="flex flex-col items-center justify-center h-[300px] bg-grayDash rounded-[12px] mt-[26px]">
+                        <div className="text-pink2 text-[22px] font-bold mb-2">List View</div>
+                        <div className="text-gray4 text-[16px] font-radioCanada">Coming Soon</div>
+                      </div>
+                    )}
+                    {view === "calendar" && (
+                      <div className="flex flex-col items-center justify-center h-[300px] bg-grayDash rounded-[12px] mt-[26px]">
+                        <div className="text-pink2 text-[22px] font-bold mb-2">Calendar View</div>
+                        <div className="text-gray4 text-[16px] font-radioCanada">Coming Soon</div>
+                      </div>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>

@@ -18,7 +18,7 @@ const ColumnType = {
   NUMBER: "NUMBER",
   DATE: "DATE",
   CHECK: "CHECK",
-  MEMEBERS:"MEMBERS",
+  MEMEBERS: "MEMBERS",
 };
 
 const CreateSheetFormModal = ({
@@ -52,7 +52,7 @@ const CreateSheetFormModal = ({
         {
           title: "Select the status",
           color: "black",
-          options: [{ name: "Pending", color: "#C6C8D6" }],
+          options: [{ name: "Pending", color: "#C6C8D6" },{ name: "In progress", color: "#B296F5" },{ name: "Done", color: "#0EC359" },{ name: "Rejected", color: "#801949" }],
         },
       ],
     },
@@ -84,7 +84,7 @@ const CreateSheetFormModal = ({
       isDefault: true,
       sheetId: sheetId,
     },
-        {
+    {
       name: "Order",
       type: ColumnType.CHECK,
       show: false,
@@ -144,7 +144,30 @@ const CreateSheetFormModal = ({
       ...sheet,
       columns: columns.filter((column) => column.show),
     };
+    // Create the sheet first
     const newSheet = await createSheet(updatedSheet);
+
+    // Add default task after sheet creation (if successful)
+    if (newSheet && newSheet.id) {
+      const defaultTask = {
+        name: "",
+        status: "",
+        priority: "",
+        link: "",
+        price: 100,
+        paid: true,
+        sheetId: newSheet.id,
+      };
+      try {
+        const token = localStorage.getItem("token");
+        await axiosInstance.post("/task", defaultTask, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch (e) {
+        // Optionally handle error
+      }
+    }
+
     setSheet({ name: "", workspaceId: id, columns });
     const resetColumns = columns.map((column) => ({ ...column, show: true }));
     setColumns(resetColumns);
@@ -161,9 +184,10 @@ const CreateSheetFormModal = ({
         `/sheet/${editingSheetId}`,
         { name: sheet.name, order: editingSheetOrder },
         {
-          headers: {
-            Authorization: ` Bearer ${token}`,
-          },
+          headers:
+            {
+              Authorization: ` Bearer ${token}`,
+            },
         }
       );
 

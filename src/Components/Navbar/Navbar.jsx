@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useContext } from "react";
 import { HiOutlineBell } from "react-icons/hi2";
 import { IoPersonAddOutline } from "react-icons/io5";
 import { IoMdMore } from "react-icons/io";
+import { HiMenuAlt2 } from "react-icons/hi";
 import defImg from "../../assets/default-avatar-icon-of-social-media-user-vector.jpg";
 import { useQuery } from "@tanstack/react-query";
 import axiosInstance from "../../AxiosInctance/AxiosInctance";
@@ -20,7 +21,7 @@ import { notificationSound } from "../../assets/sounds/notification";
 import NotificationDetailModal from "../Notifications/NotificationDetailModal";
 import { AuthContext } from "../../Auth/AuthContext";
 
-const Navbar = () => {
+const Navbar = ({ onToggleSidebar, sidebarOpen }) => {
   const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -205,11 +206,15 @@ const Navbar = () => {
 
   return (
     <div className="relative py-4 lg:py-6 xl:py-[30px] flex flex-col lg:flex-row items-start lg:items-center justify-between mx-4 lg:mx-6 xl:mx-[35px] border-b border-grayDash font-radioCanada">
-      {/* Breadcrumb */}
-      <div className="breadcrumb text-pink2 mb-4 lg:mb-0 min-w-0">
+      {/* Breadcrumb + Mobile Controls */}
+      <div className="breadcrumb text-pink2 mb-4 lg:mb-0 min-w-0 w-full flex items-center justify-between gap-2">
         <h1 className="text-responsive-lg font-[500] truncate">
-          {!workspacedownloading ? workspacelocation?.data.name : "Loading"}
-          {sheetId && (
+          {(!id && !sheetId) ? (
+            "Dashboard"
+          ) : (
+            !workspacedownloading ? workspacelocation?.data.name : "Loading"
+          )}
+          {sheetId && id && (
             <>
               {" / "}
               {!sheetdownloading && sheetlocation?.data?.name
@@ -220,6 +225,23 @@ const Navbar = () => {
             </>
           )}
         </h1>
+        {/* Mobile buttons */}
+        <div className="flex items-center gap-2 lg:hidden">
+          <button
+            aria-label="Toggle sidebar"
+            onClick={() => onToggleSidebar && onToggleSidebar()}
+            className="p-2 rounded-xl hover:bg-[#2A2A2A] text-[#C4E1FE]"
+          >
+            <HiMenuAlt2 size={22} />
+          </button>
+          <button
+            aria-label="Toggle menu"
+            onClick={toggleMenu}
+            className="p-2 rounded-xl hover:bg-[#2A2A2A] text-[#C4E1FE]"
+          >
+            <IoMdMore size={22} />
+          </button>
+        </div>
       </div>
 
       {/* Navigation Actions */}

@@ -50,71 +50,72 @@ const Members = ({role}) => {
 
   return (
     <div>
-             {(role === "author" || role === "admin") ? (
-      <div className="bg-grayDash py-[16px] px-[17px] rounded-[17px] font-radioCanada mt-[18px] shadow-xl">
-        <div className="frLine flex justify-between items-center">
-          <h1 className="text-gray2 font-radioCanada text-[16px]">Members</h1>
-          {members.length > 2 && (
-            <button
-              className="text-white text-[13px] bg-black py-[7px] px-[15px] rounded-[9px]"
-              onClick={() => setShowAll(!showAll)}
-            >
-              {showAll ? "show less" : "see all"}
-            </button>
-          )}
-        </div>
- 
-        <div className="secLine my-[12px] space-y-[4px]">
-          {displayedMembers.length > 0 ? (
-            displayedMembers.map((member, index) => (
-              <div
-                key={member.id || index}
-                className="member flex items-center gap-[12px]"
+      {(role === "author" || role === "admin") ? (
+        <div className="bg-grayDash py-3 sm:py-[14px] md:py-[16px] px-3 sm:px-[15px] md:px-[17px] rounded-[17px] font-radioCanada mt-[18px] shadow-xl">
+          <div className="frLine flex justify-between items-center">
+            <h1 className="text-gray2 font-radioCanada text-[14px] sm:text-[15px] md:text-[16px]">Members</h1>
+            {members.length > 2 && (
+              <button
+                className="text-white text-[12px] sm:text-[13px] bg-black py-[7px] px-[15px] rounded-[9px]"
+                onClick={() => setShowAll(!showAll)}
               >
-                <div className="memImg">
-                  <img
-                    src={
-                      member.user.avatar?.path
-                        ? `https://eventify.preview.uz/${member.user.avatar?.path}`
-                        : testMemImg
-                    }
-                    alt={
-                      member.user.firstName
-                        ? member.user.firstName
-                        : "Member Image"
-                    }
-                    className="w-[28.8px] h-[28.8px] rounded-full object-cover"
-                  />
+                {showAll ? "show less" : "see all"}
+              </button>
+            )}
+          </div>
+
+          <div className="secLine my-[12px] space-y-[4px]">
+            {displayedMembers.length > 0 ? (
+              displayedMembers.map((member, index) => (
+                <div
+                  key={member.id || index}
+                  className="member flex items-center gap-[12px]"
+                >
+                  <div className="memImg">
+                    <img
+                      src={
+                        member.user.avatar?.path
+                          ? `https://eventify.preview.uz/${member.user.avatar?.path}`
+                          : testMemImg
+                      }
+                      alt={
+                        member.user.firstName
+                          ? member.user.firstName
+                          : "Member Image"
+                      }
+                      className="w-6 h-6 sm:w-[28.8px] sm:h-[28.8px] rounded-full object-cover"
+                    />
+                  </div>
+                  <div className="memText">
+                    <p className="text-[13px] sm:text-[14px] md:text-[15px] text-white">
+                      {member.user.firstName
+                        ? member.user.firstName + " " + member.user.lastName
+                        : "Unknown User"}
+                    </p>
+                    <p
+                      className="text-[10px] sm:text-[11px] md:text-[12px] text-gray2"
+                      style={{
+                        maxWidth: "140px",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        display: "block"
+                      }}
+                      title={member.user.email || "No email"}
+                    >
+                      {member.user.email || "No email"}
+                    </p>
+                  </div>
                 </div>
-                <div className="memText">
-                  <p className="text-[14px] text-white ">
-                    {member.user.firstName
-                      ? member.user.firstName + " " + member.user.lastName
-                      : "Unknown User"}
-                  </p>
-                  <p
-                    className="text-[11px] text-gray2"
-                    style={{
-                      maxWidth: "140px",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      display: "block"
-                    }}
-                    title={member.user.email || "No email"}
-                  >
-                    {member.user.email || "No email"}
-                  </p>
-                </div>
-              </div>
-            ))
-          ) : (
-            <div className="text-gray2 text-center py-4">No members found</div>
-          )}
-      </div>
-        </div>):
-        <div><p className="text-gray2 text-[14px]"></p></div> 
-        }
+              ))
+            ) : (
+              <div className="text-gray2 text-center py-4">No members found</div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div><p className="text-gray2 text-[14px]"></p></div>
+      )}
 
       <InviteMemberModal
         isOpen={isInviteModalOpen}

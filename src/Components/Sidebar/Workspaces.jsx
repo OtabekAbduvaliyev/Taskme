@@ -69,21 +69,15 @@ console.log(currentPlan);
     staleTime: 300000, // Cache for 5 minutes
   });
 
-  // 1. On data load or route change, ensure the URL is valid
+  // 1. Keep user on dashboard unless they explicitly navigate or create a new workspace
   useEffect(() => {
     if (!workspacesData) return;
-    // If no workspaces, always go to /dashboard
+    // If no workspaces and a workspace id is present, redirect back to dashboard
     if (workspacesData.length === 0) {
       if (activeWorkspaceId) navigate("/dashboard", { replace: true });
       return;
     }
-    // If URL is invalid or missing, go to first workspace
-    const exists = workspacesData.some((w) => w.id === activeWorkspaceId);
-    if (!activeWorkspaceId || !exists) {
-      navigate(`/dashboard/workspace/${workspacesData[0].id}`, {
-        replace: true,
-      });
-    }
+    // Do not auto-navigate to any workspace when workspaces exist
   }, [workspacesData, activeWorkspaceId, navigate]);
 
   const handleChange = (e) => {
@@ -274,7 +268,7 @@ console.log(currentPlan);
     workspacesData.length >= currentPlan.maxWorkspaces;
 
   return (
-    <div className="bg-grayDash py-[16px] px-[17px] rounded-[17px] font-radioCanada mt-[18px] shadow-xl">
+    <div className="bg-grayDash py-3 sm:py-[14px] md:py-[16px] px-3 sm:px-[15px] md:px-[17px] rounded-[17px] font-radioCanada mt-[18px] shadow-xl">
       {/* Toast Notification */}
       <Toast
         isOpen={toast.isOpen}
@@ -302,11 +296,11 @@ console.log(currentPlan);
         onSubmit={handleOk}
       />
       <div className="frLine flex justify-between items-center">
-        <h1 className="text-gray2 font-radioCanada text-[16px]">Workspaces</h1>
+        <h1 className="text-gray2 font-radioCanada text-[14px] sm:text-[15px] md:text-[16px]">Workspaces</h1>
         {workspacesData && workspacesData.length > 3 && (
           <button
             onClick={() => setShowAll(!showAll)}
-            className="text-white text-[13px] bg-black py-[7px] px-[15px] rounded-[9px]"
+            className="text-white text-[12px] sm:text-[13px] bg-black py-[7px] px-[15px] rounded-[9px]"
           >
             {showAll ? "Show Less" : "See All"}
           </button>
@@ -347,9 +341,9 @@ console.log(currentPlan);
                         {...provided.draggableProps}
                         {...provided.dragHandleProps}
                       >
-                        <div className="flex items-center gap-[8px]">
-                          <p className="text-[18px]">#</p>
-                          <p className="text-[14px]">
+                        <div className="flex items-center gap-[6px] sm:gap-[8px]">
+                          <p className="text-[16px] sm:text-[18px]">#</p>
+                          <p className="text-[13px] sm:text-[14px] md:text-[15px]">
                             {!isLoading ? workspace.name : "Loading"}
                           </p>
                         </div>

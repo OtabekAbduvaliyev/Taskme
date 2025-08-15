@@ -1,4 +1,4 @@
-import React, { useContext, useState, useRef } from 'react'
+import React, { useContext, useState, useRef, useEffect } from 'react'
 import { AuthContext } from '../../Auth/AuthContext';
 
 const OTP_LENGTH = 6;
@@ -8,6 +8,10 @@ const Verification = () => {
   const [otpArr, setOtpArr] = useState(Array(OTP_LENGTH).fill(""));
   const { verification, loading } = useContext(AuthContext);
   const inputRefs = useRef([]);
+
+  useEffect(() => {
+    inputRefs.current[0]?.focus();
+  }, []);
 
   const handleChange = (idx, value) => {
     if (!/^[0-9]?$/.test(value)) return;

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useContext, useEffect } from "react";
+import React, { useState, useCallback, useContext, useEffect, useRef } from "react";
 import axiosInstance from "../../../AxiosInctance/AxiosInctance";
 import { AuthContext } from "../../../Auth/AuthContext";
 import { useParams } from "react-router-dom";
@@ -32,6 +32,7 @@ const SheetTabel = ({
   handleMoveTask,
   filteredTasks,
   setFilteredTasks,
+  isCreatingTask,
 }) => {
   const { sheetId } = useParams();
   const [isOpen, setIsOpen] = useState(false);
@@ -246,14 +247,8 @@ const SheetTabel = ({
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
 
-  // Sort filteredTasks by order before paginating
-  const sortedFilteredTasks = [...filteredTasks].sort((a, b) => {
-    if (typeof a.order === "number" && typeof b.order === "number") {
-      return a.order - b.order;
-    }
-    return 0;
-  });
-  const paginatedTasks = sortedFilteredTasks.slice(indexOfFirstItem, indexOfLastItem);
+  // Use filteredTasks as-is for pagination (do not sort here)
+  const paginatedTasks = filteredTasks.slice(indexOfFirstItem, indexOfLastItem);
 
   // Modified function to handle task deletion without page reload
 
@@ -343,6 +338,16 @@ const SheetTabel = ({
     setChatTask(null);
   };
 
+  // Track the last created task id to autofocus
+  const lastCreatedTaskIdRef = useRef(null);
+
+  useEffect(() => {
+    if (isCreatingTask === false && filteredTasks.length > 0) {
+      // Find the newest task (assuming sorted newest first)
+      lastCreatedTaskIdRef.current = filteredTasks[0]?.id;
+    }
+  }, [isCreatingTask, filteredTasks]);
+
   if (isLoading) {
     return (
       <div className="mt-[26px]">
@@ -399,13 +404,13 @@ const SheetTabel = ({
       />
 
       <DragDropContext onDragEnd={handleOnDragEnd}>
-        <div>
-          <table className="bg-grayDash font-radioCanada w-full min-w-full">
+        <div className="w-full overflow-x-auto sm:overflow-x-visible">
+          <table className="bg-grayDash font-radioCanada w-full min-w-max">
             <thead className="border-1 text-white">
               <tr className="flex border-[black] border-b">
                 {/* Sticky checkbox header cell */}
                 <td
-                  className="w-[48px] py-[16px] px-[11px] flex items-center justify-center border-r border-r-[black] cursor-pointer bg-grayDash sticky left-0 z-30 top-0"
+                  className="w-[44px] sm:w-[48px] py-[12px] sm:py-[16px] px-[8px] sm:px-[11px] flex items-center justify-center border-r border-r-[black] cursor-pointer bg-grayDash sticky left-0 z-30 top-0"
                   onClick={handleSelectAllTasks}
                 >
                   <label className="relative flex items-center cursor-pointer select-none">
@@ -439,10 +444,10 @@ const SheetTabel = ({
                   </label>
                 </td>
                 <td
-                  className="w-[48px] py-[16px] px-[11px] flex items-center justify-center border-r border-r-[black] cursor-pointer bg-grayDash sticky left-[48px] z-30 top-0"
+                  className="w-[44px] sm:w-[48px] py-[12px] sm:py-[16px] px-[8px] sm:px-[11px] flex items-center justify-center border-r border-r-[black] cursor-pointer bg-grayDash sticky left-[44px] sm:left-[48px] z-30 top-0"
                 >
-                  <div className="chat w-[25px] h-[25px] flex items-center justify-center">
-                    <IoMdChatbubbles className="text-gray4 w-[30px] h-[30px]" />
+                  <div className="chat w-[22px] h-[22px] sm:w-[25px] sm:h-[25px] flex items-center justify-center">
+                    <IoMdChatbubbles className="text-gray4 w-[22px] h-[22px] sm:w-[26px] sm:h-[26px]" />
                   </div>
                 </td>
                 {/* Draggable Columns + Sticky Add Button */}
@@ -476,8 +481,8 @@ const SheetTabel = ({
                                     placement="bottomLeft"
                                   >
                                     <div
-                                      className={`w-[180px] flex items-center justify-between py-[16px] border-r border-[black] px-[11px] hide
-                                        ${isFirst ? "sticky left-[96px] bg-grayDash top-0 z-20" : ""}
+                                      className={`w-[140px] sm:w-[160px] md:w-[180px] flex items-center justify-between py-[12px] sm:py-[16px] border-r border-[black] px-[8px] sm:px-[11px] hide
+                                        ${isFirst ? "sticky left-[88px] sm:left-[96px] bg-grayDash top-0 z-20" : ""}
                                       `}
                                       ref={provided.innerRef}
                                       {...provided.draggableProps}
@@ -497,10 +502,10 @@ const SheetTabel = ({
 
                         {/* Sticky Add Button */}
                         <div
-                          className="w-[50px] flex items-end justify-center py-[16px] border-r border-[black] px-[11px] cursor-pointer bg-grayDash  sticky right-0 top-0"
+                          className="w-[44px] sm:w-[50px] flex items-end justify-center py-[12px] sm:py-[16px] border-r border-[black] px-[8px] sm:px-[11px] cursor-pointer bg-grayDash sticky right-0 top-0"
                           onClick={handleToggleModal}
                         >
-                          <IoAddCircleOutline className="text-[20px] text-gray4" />
+                          <IoAddCircleOutline className="text-[18px] sm:text-[20px] text-gray4" />
                         </div>
                       </div>
                     )}
@@ -524,8 +529,9 @@ const SheetTabel = ({
                         onSelect={handleTaskSelect}
                         onEdit={() => setEditingTaskId(task.id)}
                         onChange={handleColumnChange}
-                        stickyFirstThreeColumns // <-- pass a prop to SheetTableItem to handle sticky style for first three columns
+                        stickyFirstThreeColumns
                         onChatIconClick={() => handleOpenChatSidebar(task)}
+                        autoFocus={task.id === lastCreatedTaskIdRef.current && index === 0}
                       />
                     </tr>
                   ))}

@@ -6,11 +6,14 @@ import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { Draggable } from "react-beautiful-dnd";
 import { AuthContext } from "../../../../Auth/AuthContext";
-import { useState, useContext } from "react";
+import { useRef, useEffect, useState, useContext } from "react";
 import testMemImg from "../../../../assets/default-avatar-icon-of-social-media-user-vector.jpg"
 import { IoMdChatbubbles } from "react-icons/io";
 import axiosInstance from "../../../../AxiosInctance/AxiosInctance";
 import { IoClose } from "react-icons/io5";
+import InviteMemberModal from "../../../Modals/InviteMemberModal";
+import { SketchPicker } from "react-color";
+import ReactDOM from "react-dom";
 
 const SheetTableItem = ({
   task,
@@ -20,8 +23,9 @@ const SheetTableItem = ({
   index,
   isSelected,
   onSelect,
-  stickyFirstThreeColumns, // new prop
-  onChatIconClick, // new prop
+  stickyFirstThreeColumns,
+  onChatIconClick,
+  autoFocus, // <-- new prop
 }) => {
   const handleInputChange = (taskKey, e) => {
     let value = e?.target?.value;
@@ -47,10 +51,33 @@ const SheetTableItem = ({
     onChange(task.id, taskKey, value);
   };
 
-  const { members: companyMembers } = useContext(AuthContext);
+  const { members: companyMembers, user } = useContext(AuthContext);
   const [showMemberModal, setShowMemberModal] = useState(false);
   const [selectedMemberIds, setSelectedMemberIds] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+
+  // State for add option modal
+  const [addOptionModal, setAddOptionModal] = useState({
+    open: false,
+    columnKey: null,
+    selectId: null,
+  });
+  const [addOptionName, setAddOptionName] = useState("");
+  const [addOptionColor, setAddOptionColor] = useState("#801949");
+  const [addingOption, setAddingOption] = useState({});
+  const [showColorPicker, setShowColorPicker] = useState(false);
+
+  // State for manage options modal
+  const [manageOptionsModal, setManageOptionsModal] = useState({
+    open: false,
+    columnKey: null,
+    selectId: null,
+    options: [],
+  });
+  const [editOptions, setEditOptions] = useState({});
+  const [savingOptionId, setSavingOptionId] = useState(null);
+  const [deletingOptionId, setDeletingOptionId] = useState(null);
 
   // Open modal and set selected members to current task members
   const handleOpenMemberModal = () => {
@@ -86,32 +113,384 @@ const SheetTableItem = ({
     setIsSaving(false);
   };
 
-  const renderField = (columnKey, columnType, column) => {
+  // Add option handler (modal)
+  const handleAddOption = async () => {
+    const { columnKey, selectId } = addOptionModal;
+    if (!addOptionName.trim() || !selectId) return;
+    setAddingOption((prev) => ({ ...prev, [columnKey]: true }));
+    try {
+      const token = localStorage.getItem("token");
+      await axiosInstance.post(
+        "/option",
+        { name: addOptionName, color: addOptionColor, selectId },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      closeAddOptionModal();
+      if (typeof onEdit === "function") onEdit();
+    } catch (e) {
+      // Optionally show error
+    }
+    setAddingOption((prev) => ({ ...prev, [columnKey]: false }));
+  };
+
+  const openAddOptionModal = (columnKey, selectId) => {
+    setAddOptionModal({ open: true, columnKey, selectId });
+    setAddOptionName("");
+    setAddOptionColor("#801949");
+    setShowColorPicker(false);
+  };
+
+  const closeAddOptionModal = () => {
+    setAddOptionModal({ open: false, columnKey: null, selectId: null });
+    setAddOptionName("");
+    setAddOptionColor("#801949");
+    setShowColorPicker(false);
+  };
+
+  // Open manage options modal
+  const openManageOptionsModal = (columnKey, selectId, options) => {
+    setManageOptionsModal({
+      open: true,
+      columnKey,
+      selectId,
+      options: options.map(opt => ({
+        ...opt,
+        editName: opt.name,
+        editColor: opt.color || "#801949",
+      })),
+    });
+    setEditOptions({});
+    setSavingOptionId(null);
+    setDeletingOptionId(null);
+  };
+
+  // Close manage options modal
+  const closeManageOptionsModal = () => {
+    setManageOptionsModal({
+      open: false,
+      columnKey: null,
+      selectId: null,
+      options: [],
+    });
+    setEditOptions({});
+    setSavingOptionId(null);
+    setDeletingOptionId(null);
+  };
+
+  // Handle edit in manage modal
+  const handleEditOptionChange = (id, field, value) => {
+    setManageOptionsModal(prev => ({
+      ...prev,
+      options: prev.options.map(opt =>
+        opt.id === id ? { ...opt, [field]: value } : opt
+      ),
+    }));
+  };
+
+  // Save option update
+  const handleSaveOption = async (id, name, color) => {
+    setSavingOptionId(id);
+    try {
+      const token = localStorage.getItem("token");
+      await axiosInstance.put(
+        `/option/${id}`,
+        { name, color },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (typeof onEdit === "function") onEdit();
+    } catch {}
+    setSavingOptionId(null);
+  };
+  console.log(user);
+  
+  // Delete option
+  const handleDeleteOption = async (id) => {
+    setDeletingOptionId(id);
+    try {
+      const token = localStorage.getItem("token");
+      await axiosInstance.delete(
+        `/option/${id}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setManageOptionsModal(prev => ({
+        ...prev,
+        options: prev.options.filter(opt => opt.id !== id),
+      }));
+      if (typeof onEdit === "function") onEdit();
+    } catch {}
+    setDeletingOptionId(null);
+  };
+
+  // User info state
+  const [userInfo, setUserInfo] = useState(null);
+
+  useEffect(() => {
+    const fetchUserInfo = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await axiosInstance.get("/user/info", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setUserInfo(res.data);
+      } catch {}
+    };
+    fetchUserInfo();
+  }, []);
+
+  // Ref for first input
+  const firstInputRef = useRef(null);
+
+  useEffect(() => {
+    if (autoFocus && firstInputRef.current) {
+      firstInputRef.current.focus();
+      // Optionally select all text:
+      if (typeof firstInputRef.current.select === "function") {
+        firstInputRef.current.select();
+      }
+    }
+  }, [autoFocus]);
+
+  const renderField = (columnKey, columnType, column, colIdx) => {
     const lowerKey = columnKey.toLowerCase();
     const lowerType = columnType?.toLowerCase();
 
-    // Dynamic SELECT dropdown
+    // Dynamic SELECT dropdown with add option modal
     if (lowerType === "select" && column?.selects?.[0]?.options) {
+      const selectId = column.selects[0]?.id;
+      const options = column.selects[0].options;
       return (
-        <Select
-          suffixIcon={null}
-          onChange={(value) =>
-            handleInputChange(lowerKey, { target: { value } })
+        <div className="w-full">
+          <Select
+            suffixIcon={null}
+            onChange={(value) =>
+              handleInputChange(lowerKey, { target: { value } })
+            }
+            defaultValue={task[lowerKey] || "Select value"}
+            className="w-full"
+            style={{ width: "100%" }}
+            dropdownRender={menu => (
+              <>
+                {menu}
+                {/* Only show add/manage buttons if user is AUTHOR */}
+                {userInfo?.roles?.some(r => r.type === "AUTHOR") && (
+                  <div className="flex flex-col gap-1 px-2 py-1 border-t border-gray-700 bg-grayDash">
+                    <button
+                      className="w-full py-1 text-pink2 hover:text-white hover:bg-pink2 rounded transition"
+                      onClick={e => {
+                        e.stopPropagation();
+                        openAddOptionModal(lowerKey, selectId);
+                      }}
+                    >
+                      + Add option
+                    </button>
+                    <button
+                      className="w-full py-1 text-white2 hover:text-white hover:bg-gray3 rounded transition border border-gray4"
+                      onClick={e => {
+                        e.stopPropagation();
+                        openManageOptionsModal(lowerKey, selectId, options);
+                      }}
+                    >
+                      Manage options
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          >
+            {options.map((option) => (
+              <Select.Option key={option.id} value={option.name}>
+                <Selects
+                  bgSelect={option.color || "#FFFFFF"}
+                  value={option.name}
+                  textColor={"#000000"}
+                >
+                  {option.name}
+                </Selects>
+              </Select.Option>
+            ))}
+          </Select>
+          {/* Add Option Modal */}
+          {addOptionModal.open && addOptionModal.columnKey === lowerKey &&
+            typeof window !== "undefined" &&
+            document.getElementById("root") &&
+            ReactDOM.createPortal(
+              <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black bg-opacity-40">
+                <div className="bg-grayDash rounded-lg shadow-lg p-6 w-full max-w-[350px] relative">
+                  <div className="flex justify-between items-center mb-4">
+                    <div className="font-bold text-lg text-white">Add Option</div>
+                    <button
+                      className="text-gray4 hover:text-pink2 text-xl"
+                      onClick={closeAddOptionModal}
+                    >
+                      <IoClose />
+                    </button>
+                  </div>
+                  <div className="mb-4">
+                    <label className="block text-white mb-1">Name</label>
+                    <Input
+                      value={addOptionName}
+                      onChange={e => setAddOptionName(e.target.value)}
+                      placeholder="Option name"
+                      className="mb-2"
+                    />
+                    <label className="block text-white mb-1">Color</label>
+                    <div className="relative">
+                      <div
+                        className="w-full h-6 rounded cursor-pointer border-2 border-gray3 mb-2"
+                        style={{ background: addOptionColor }}
+                        title={addOptionColor}
+                        onClick={() => setShowColorPicker(v => !v)}
+                      />
+                      {showColorPicker && (
+                        <div className="absolute z-50" style={{ top: 32, left: 0 }}>
+                          {/* Overlay for closing the picker */}
+                          <div
+                            className="fixed inset-0"
+                            style={{ zIndex: 49 }}
+                            onClick={() => setShowColorPicker(false)}
+                          />
+                          {/* Picker must be above the overlay */}
+                          <div style={{ position: "relative", zIndex: 50 }}>
+                            <SketchPicker
+                              color={addOptionColor}
+                              onChange={color => setAddOptionColor(color.hex)}
+                              presetColors={[
+                                "#801949", "#0EC359", "#BF7E1C", "#DC5091", "#FFFFFF", "#23272F"
+                              ]}
+                              disableAlpha
+                              width={180}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2 mt-4">
+                    <button
+                      className="px-4 py-2 rounded bg-gray3 text-white"
+                      onClick={closeAddOptionModal}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="px-4 py-2 rounded bg-pink2 text-white font-semibold disabled:opacity-60"
+                      onClick={handleAddOption}
+                      disabled={addingOption[lowerKey] || !addOptionName.trim()}
+                    >
+                      {addingOption[lowerKey] ? "Adding..." : "Add"}
+                    </button>
+                  </div>
+                </div>
+              </div>,
+              document.getElementById("root")
+            )
           }
-          defaultValue={task[lowerKey] || "Select value"}
-        >
-          {column.selects[0].options.map((option) => (
-            <Select.Option key={option.id} value={option.name}>
-              <Selects
-                bgSelect={option.color || "#FFFFFF"}
-                value={option.name}
-                textColor={"#000000"}
-              >
-                {option.name}
-              </Selects>
-            </Select.Option>
-          ))}
-        </Select>
+          {/* Manage Options Modal */}
+          {manageOptionsModal.open && manageOptionsModal.columnKey === lowerKey &&
+            typeof window !== "undefined" &&
+            document.getElementById("root") &&
+            ReactDOM.createPortal(
+              <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black bg-opacity-40">
+                <div className="bg-grayDash rounded-lg shadow-lg p-6 w-full max-w-[400px] relative">
+                  <div className="flex justify-between items-center mb-4">
+                    <div className="font-bold text-lg text-white">Manage Options</div>
+                    <button
+                      className="text-gray4 hover:text-pink2 text-xl"
+                      onClick={closeManageOptionsModal}
+                    >
+                      <IoClose />
+                    </button>
+                  </div>
+                  <div className="flex flex-col gap-3 max-h-[320px] overflow-y-auto">
+                    {manageOptionsModal.options.length === 0 && (
+                      <div className="text-gray4 text-center py-6">No options found.</div>
+                    )}
+                    {manageOptionsModal.options.map(opt => (
+                      <div
+                        key={opt.id}
+                        className="flex items-center gap-2 bg-gray3 rounded px-2 py-2 relative"
+                        style={{ alignItems: "flex-start" }}
+                      >
+                        <Input
+                          value={opt.editName}
+                          onChange={e => handleEditOptionChange(opt.id, "editName", e.target.value)}
+                          className="flex-1"
+                          size="small"
+                        />
+                        <div className="relative flex-shrink-0">
+                          <div
+                            className="w-8 h-6 rounded cursor-pointer border-2 border-gray4"
+                            style={{ background: opt.editColor }}
+                            title={opt.editColor}
+                            onClick={e => {
+                              e.stopPropagation();
+                              setEditOptions(prev => ({
+                                ...prev,
+                                [opt.id]: !prev[opt.id]
+                              }));
+                            }}
+                          />
+                          {editOptions[opt.id] && (
+                            <div
+                              className="absolute left-0"
+                              style={{
+                                top: "110%",
+                                zIndex: 100,
+                                minWidth: 0,
+                                minHeight: 0,
+                                background: "transparent"
+                              }}
+                            >
+                              {/* Overlay for closing the picker */}
+                              <div
+                                className="fixed inset-0"
+                                style={{ zIndex: 99 }}
+                                onClick={() =>
+                                  setEditOptions(prev => ({
+                                    ...prev,
+                                    [opt.id]: false
+                                  }))
+                                }
+                              />
+                              <div style={{ position: "relative", zIndex: 100 }}>
+                                <SketchPicker
+                                  color={opt.editColor}
+                                  onChange={color =>
+                                    handleEditOptionChange(opt.id, "editColor", color.hex)
+                                  }
+                                  presetColors={[
+                                    "#801949", "#0EC359", "#BF7E1C", "#DC5091", "#FFFFFF", "#23272F"
+                                  ]}
+                                  disableAlpha
+                                  width={180}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          className="px-2 py-1 rounded bg-pink2 text-white text-xs font-semibold disabled:opacity-60"
+                          onClick={() => handleSaveOption(opt.id, opt.editName, opt.editColor)}
+                          disabled={savingOptionId === opt.id || !opt.editName.trim()}
+                        >
+                          {savingOptionId === opt.id ? "Saving..." : "Save"}
+                        </button>
+                        <button
+                          className="px-2 py-1 rounded bg-red-600 text-white text-xs font-semibold disabled:opacity-60"
+                          onClick={() => handleDeleteOption(opt.id)}
+                          disabled={deletingOptionId === opt.id}
+                        >
+                          {deletingOptionId === opt.id ? "Deleting..." : "Delete"}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>,
+              document.getElementById("root")
+            )
+          }
+        </div>
       );
     }
 
@@ -299,7 +678,7 @@ const SheetTableItem = ({
           </div>
           {showMemberModal && (
             <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black bg-opacity-40">
-              <div className="bg-grayDash rounded-lg shadow-lg p-6 w-[340px] max-w-full">
+              <div className="bg-grayDash rounded-lg shadow-lg p-4 w-full max-w-[400px] min-h-[220px]">
                 <div className="flex justify-between items-center mb-4">
                   <div className="font-bold text-lg text-white">
                     Select Members
@@ -311,7 +690,7 @@ const SheetTableItem = ({
                     <IoClose />
                   </button>
                 </div>
-                <div className="max-h-[260px] overflow-y-auto mb-4">
+                <div className="max-h-[160px] overflow-y-auto mb-4">
                   {!companyMembers || companyMembers.length === 0 ? (
                     <div className="text-gray4 text-center py-6">
                       No company members found.
@@ -345,24 +724,39 @@ const SheetTableItem = ({
                     ))
                   )}
                 </div>
-                <div className="flex justify-end gap-2">
+                <div className="flex flex-col gap-2">
                   <button
-                    className="px-4 py-2 rounded bg-gray3 text-white"
-                    onClick={() => setShowMemberModal(false)}
+                    className="w-full h-9 rounded bg-pink2 text-white font-semibold hover:bg-pink transition mb-2"
+                    onClick={() => {
+                      setShowMemberModal(false);
+                      setShowInviteModal(true);
+                    }}
                   >
-                    Cancel
+                    Invite
                   </button>
-                  <button
-                    className="px-4 py-2 rounded bg-pink2 text-white font-semibold disabled:opacity-60"
-                    onClick={handleSaveMembers}
-                    disabled={isSaving}
-                  >
-                    {isSaving ? "Saving..." : "Save"}
-                  </button>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      className="px-4 py-2 rounded bg-gray3 text-white"
+                      onClick={() => setShowMemberModal(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="px-4 py-2 rounded bg-pink2 text-white font-semibold disabled:opacity-60"
+                      onClick={handleSaveMembers}
+                      disabled={isSaving}
+                    >
+                      {isSaving ? "Saving..." : "Save"}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           )}
+          <InviteMemberModal
+            isOpen={showInviteModal}
+            onClose={() => setShowInviteModal(false)}
+          />
         </>
       );
     }
@@ -370,6 +764,7 @@ const SheetTableItem = ({
     // Default input
     return (
       <Input
+        ref={autoFocus && colIdx === 0 ? firstInputRef : undefined}
         className="bg-grayDash border-none focus:bg-gray3 hover:bg-grayDash text-white text-[18px]"
         value={task[lowerKey] || ""}
         onChange={(e) => handleInputChange(lowerKey, e)}
@@ -447,7 +842,7 @@ const SheetTableItem = ({
                   }`}
                   onClick={() => onEdit && onEdit()}
                 >
-                  {renderField(column.key, column.type, column)}
+                  {renderField(column.key, column.type, column, idx)}
                 </td>
               )
           )}

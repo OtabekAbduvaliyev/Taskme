@@ -27,19 +27,19 @@ const Sidebar = () => {
 
   return (
     <>
-      <div className="h-screen flex flex-col py-4 lg:py-5 xl:py-[22px] px-4 lg:px-5 xl:px-[31px] border-r border-1 border-grayDash overflow-y-auto sidebar-container custom-scrollbar">
+      <div className="h-screen flex flex-col py-3 sm:py-4 lg:py-5 xl:py-[22px] px-3 sm:px-4 lg:px-5 xl:px-[31px] border-r border-1 border-grayDash overflow-y-auto sidebar-container custom-scrollbar">
         <div className="brand flex items-center justify-between bg-pink rounded-[16px] p-4 lg:p-5 xl:p-6 w-full">
-          <div className="flex items-center gap-3 lg:gap-4 xl:gap-[23px]">
+          <div className="flex items-center gap-2 sm:gap-3 lg:gap-4 xl:gap-[23px]">
             <div className="flex-shrink-0">
               <img
                 src={logo}
                 alt="Logo"
-                className="w-7 h-7 lg:w-[28px] xl:w-[30px] lg:h-[28px] xl:h-[30px] rounded-[5px] object-contain"
+                className="w-6 h-6 sm:w-7 sm:h-7 lg:w-[28px] xl:w-[30px] lg:h-[28px] xl:h-[30px] rounded-[5px] object-contain"
               />
             </div>
-            <h1 className="text-responsive-xl font-bold text-white whitespace-nowrap">
-              Eventify
-            </h1>
+            <a href="/dashboard" className="font-bold text-white whitespace-nowrap text-[16px] sm:text-[18px] lg:text-[20px] xl:text-[22px] hover:opacity-90">
+              Task me
+            </a>
           </div>
         </div>
 
@@ -61,13 +61,13 @@ const Sidebar = () => {
 
         <Link
           to="#"
-          className="settings xl:mt-auto pt-[30px]"
+          className="settings mt-auto pt-[30px] pb-3 px-1"
           onClick={e => {
             e.preventDefault();
             setShowSettings(true);
           }}
         >
-          <button className="flex w-full bg-white rounded-[9px] py-2 lg:py-3 xl:py-[10px] px-4 lg:px-5 xl:pl-[20px] gap-2 lg:gap-[3px] items-center font-radioCanada hover:bg-gray-100 transition-colors">
+          <button className="flex w-full bg-white rounded-[9px] py-3 lg:py-3 xl:py-[10px] px-5 lg:px-5 xl:pl-[20px] gap-2 lg:gap-[3px] items-center font-radioCanada hover:bg-gray-100 transition-colors">
             <IoSettingsSharp className="text-lg lg:text-xl xl:text-[22px] text-grayDash" />
             <p className="text-responsive-sm">Settings</p>
           </button>

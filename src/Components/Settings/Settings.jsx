@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiUser, FiLock, FiBriefcase, FiSave, FiEdit2, FiCamera, FiEye, FiEyeOff, FiArrowLeft, FiX } from 'react-icons/fi';
+import { FiUser, FiLock, FiBriefcase, FiSave, FiEdit2, FiCamera, FiEye, FiEyeOff, FiArrowLeft, FiX, FiTrash2 } from 'react-icons/fi';
 import axiosInstance from '../../AxiosInctance/AxiosInctance';
 import { AuthContext } from '../../Auth/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import ReactDOM from "react-dom";
+import DeleteConfirmationModal from '../Modals/DeleteConfirmationModal';
 
 const Settings = ({ onClose }) => {
   const [activeTab, setActiveTab] = useState('profile');
@@ -27,6 +29,9 @@ const Settings = ({ onClose }) => {
   // Password visibility state
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
+
+  // Delete confirmation modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -148,6 +153,97 @@ const Settings = ({ onClose }) => {
       })
       .finally(() => setPlansLoading(false));
   }, [activeTab]);
+
+  // Company tab state
+  const [companyData, setCompanyData] = useState(null);
+  const [companyForm, setCompanyForm] = useState({
+    name: '',
+    description: '',
+    isBlocked: false
+  });
+  const [companyLoading, setCompanyLoading] = useState(false);
+  const [companyEdit, setCompanyEdit] = useState(false);
+
+  useEffect(() => {
+    if (activeTab !== "company") return;
+    const fetchCompany = async () => {
+      setCompanyLoading(true);
+      try {
+        // Use company/{id} instead of company/current
+        if (!userData?.roles?.[0]?.company?.id) {
+          setCompanyData(null);
+          setCompanyLoading(false);
+          return;
+        }
+        const companyId = userData.roles[0].company.id;
+        const res = await axiosInstance.get(`/company/${companyId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setCompanyData(res.data);
+        setCompanyForm({
+          name: res.data.name || '',
+          description: res.data.description || '',
+          isBlocked: !!res.data.isBlocked
+        });
+      } catch (err) {
+        setCompanyData(null);
+      } finally {
+        setCompanyLoading(false);
+      }
+    };
+    fetchCompany();
+  }, [activeTab, userData]);
+
+  const handleCompanyChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setCompanyForm(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  const handleCompanyUpdate = async () => {
+    if (!companyData?.id) return;
+    setCompanyLoading(true);
+    try {
+      await axiosInstance.put(`/workspace/${companyData.id}`, companyForm, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setCompanyEdit(false);
+      // Refetch company info
+      const res = await axiosInstance.get('/company/current', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setCompanyData(res.data);
+      setCompanyForm({
+        name: res.data.name || '',
+        description: res.data.description || '',
+        isBlocked: !!res.data.isBlocked
+      });
+    } catch (err) {
+      // handle error
+    } finally {
+      setCompanyLoading(false);
+    }
+  };
+
+  const handleCompanyDelete = async () => {
+    if (!companyData?.id) return;
+    setCompanyLoading(true);
+    try {
+      await axiosInstance.delete(`/company/${companyData.id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setCompanyData(null);
+      setShowDeleteModal(false);
+      onClose();
+      // Optionally navigate or show toast
+    } catch (err) {
+      // handle error
+    } finally {
+      setCompanyLoading(false);
+    }
+  };
 
   const tabContent = {
     profile: (
@@ -378,6 +474,92 @@ const Settings = ({ onClose }) => {
           </div>
         )}
       </div>
+    ),
+    company: (
+      <div className="space-y-6 py-3">
+        <h2 className="text-2xl font-bold text-white mb-4">Company Settings</h2>
+        {companyLoading ? (
+          <div className="text-white2 mb-6">Loading company info...</div>
+        ) : !companyData ? (
+          <div className="text-white2 mb-6">No company info found.</div>
+        ) : (
+          <div>
+            <div className="flex justify-end mb-4">
+              <button
+                onClick={() => setCompanyEdit(!companyEdit)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#23272F] text-pink2 hover:bg-pink2/10 transition-colors"
+              >
+                <FiEdit2 />
+                {companyEdit ? 'Cancel' : 'Edit Company'}
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-[#C4E1FE] mb-2 font-medium">Name</label>
+                <input
+                  type="text"
+                  name="name"
+                  value={companyForm.name}
+                  onChange={handleCompanyChange}
+                  disabled={!companyEdit}
+                  className={`w-full bg-[#23272F] border-2 ${
+                    companyEdit ? 'border-[#3A3A3A] focus:border-pink2' : 'border-transparent'
+                  } rounded-xl py-3 px-4 text-white transition-all ${
+                    !companyEdit ? 'cursor-not-allowed opacity-70' : ''
+                  }`}
+                />
+              </div>
+              <div>
+                <label className="block text-[#C4E1FE] mb-2 font-medium">Description</label>
+                <input
+                  type="text"
+                  name="description"
+                  value={companyForm.description}
+                  onChange={handleCompanyChange}
+                  disabled={!companyEdit}
+                  className={`w-full bg-[#23272F] border-2 ${
+                    companyEdit ? 'border-[#3A3A3A] focus:border-pink2' : 'border-transparent'
+                  } rounded-xl py-3 px-4 text-white transition-all ${
+                    !companyEdit ? 'cursor-not-allowed opacity-70' : ''
+                  }`}
+                />
+              </div>
+            </div>
+            <div className="flex items-center mb-4">
+              <label className="text-[#C4E1FE] font-medium mr-3">Blocked</label>
+              <input
+                type="checkbox"
+                name="isBlocked"
+                checked={companyForm.isBlocked}
+                onChange={handleCompanyChange}
+                disabled={!companyEdit}
+                className="w-5 h-5 accent-pink2"
+              />
+            </div>
+            {companyEdit && (
+              <motion.button
+                onClick={handleCompanyUpdate}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className="w-full py-4 bg-gradient-to-r from-pink2 to-pink2/90 text-white rounded-xl font-bold text-lg mb-4"
+              >
+                <FiSave className="inline mr-2" />
+                Save Company Changes
+              </motion.button>
+            )}
+            <motion.button
+              onClick={() => setShowDeleteModal(true)}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.98 }}
+              className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-400 text-white rounded-lg font-bold text-base flex items-center justify-center gap-2 w-fit"
+              style={{ minWidth: 0 }}
+            >
+              <FiTrash2 className="inline" />
+              Delete
+            </motion.button>
+          </div>
+        )}
+      </div>
     )
   };
 
@@ -389,7 +571,7 @@ const Settings = ({ onClose }) => {
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
         {/* Backdrop */}
         <motion.div
           className="fixed inset-0 bg-black bg-opacity-60"
@@ -416,18 +598,19 @@ const Settings = ({ onClose }) => {
             >
               <FiX size={22} />
             </button>
-            <h1 className="text-3xl font-bold text-white mb-8">Settings</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white mb-6 sm:mb-8">Settings</h1>
             {/* Tabs */}
-            <div className="flex space-x-6 mb-8 border-b border-[#3A3A3A] pb-4">
+            <div className="flex space-x-4 sm:space-x-6 mb-6 sm:mb-8 border-b border-[#3A3A3A] pb-3 sm:pb-4 overflow-x-auto custom-scrollbar whitespace-nowrap">
               {[
                 { id: 'profile', icon: FiUser, label: 'Profile' },
                 { id: 'security', icon: FiLock, label: 'Security' },
-                { id: 'upgrade', icon: FiBriefcase, label: 'Upgrade' }
+                { id: 'upgrade', icon: FiBriefcase, label: 'Upgrade' },
+                { id: 'company', icon: FiBriefcase, label: 'Company' } // <-- Add Company tab
               ].map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all ${
+                  className={`flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-lg transition-all text-sm sm:text-base shrink-0 ${
                     activeTab === tab.id
                       ? 'text-pink2 bg-pink2/10'
                       : 'text-[#C4E1FE] hover:text-white'
@@ -444,6 +627,17 @@ const Settings = ({ onClose }) => {
             </div>
           </div>
         </motion.div>
+        {/* DeleteConfirmationModal rendered in modal-root */}
+        {ReactDOM.createPortal(
+          <DeleteConfirmationModal
+            isOpen={showDeleteModal}
+            onClose={() => setShowDeleteModal(false)}
+            onDelete={handleCompanyDelete}
+            title="Delete Company"
+            message="Are you sure you want to delete this company? This action cannot be undone."
+          />,
+          document.getElementById("modal-root")
+        )}
       </div>
     </AnimatePresence>
   );

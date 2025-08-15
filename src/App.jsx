@@ -13,6 +13,7 @@ import Workspace from './Pages/Dashboard/Workspace/Workspace';
 import WelcomeDashboard from './Components/WelcomeDashboard';
 import NotificationsPage from './Components/Notifications/NotificationsPage';
 import Settings from './Components/Settings/Settings';
+import AdminDashboard from './Pages/Admin/AdminDashboard';
 
 const App = () => {
   const router = createBrowserRouter([
@@ -69,6 +70,11 @@ const App = () => {
           element: <ProtectedRoute element={<Workspace />} />,
         },
       ]
+    },
+    {
+      path: "/admin",
+      element: <AuthProvider><ProtectedRoute element={<AdminDashboard />} /></AuthProvider>,
+      // You can add children routes here if needed, similar to dashboard
     },
   ]);
   return (
