@@ -299,13 +299,22 @@ console.log(data);
     staleTime: 300000,
   });
 
-  // Determine sheet add eligibility
+  // Determine sheet add eligibility (treat -1 as unlimited)
   const sheetLimitReached =
     currentPlan &&
     typeof currentPlan.maxSheets === "number" &&
+    currentPlan.maxSheets !== -1 && // do not enforce limit when -1
     sheets &&
     sheets.sheets &&
     sheets.sheets.length >= currentPlan.maxSheets;
+
+  // human-friendly display for max sheets
+  const displayMaxSheets =
+    currentPlan && typeof currentPlan.maxSheets === "number"
+      ? currentPlan.maxSheets === -1
+        ? "Unlimited"
+        : currentPlan.maxSheets
+      : "";
 
   return (
     <>
@@ -397,6 +406,16 @@ console.log(data);
                 <IoAddCircleOutline className="text-[18px] sm:text-[20px]" />
               </div>
             </div>
+
+            {/* Show limit hint when reached */}
+            {sheetLimitReached && (
+              <div className="mt-2">
+                <p className="text-red-400 text-xs">
+                  Sheet limit reached for your plan ({displayMaxSheets}). Upgrade to add more.
+                </p>
+              </div>
+            )}
+
             {/* 2. Sheet Actions - sticky below tabs */}
             {sheetId && (
               <motion.div
@@ -457,7 +476,7 @@ console.log(data);
               </motion.div>
             )}
             {/* 3. Task View - scrollable middle */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 mt-[10px] mb-[20px] rounded-[12px]">
+            <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 mt-[10px] mb-[20px] pb-[110px] rounded-[12px]">
               <AnimatePresence mode="wait">
                 {isLoading ? (
                   <motion.div

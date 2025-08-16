@@ -11,6 +11,7 @@ const ColumnType = {
   DATE: "DATE",
   CHECK: "CHECK",
   MEMBER: "MEMBER",
+  DUEDATE: "DUEDATE",
 };
 
 const CustomModal = ({ isOpen, handleToggleModal, handleOk, column, handleChange, isEditing }) => {

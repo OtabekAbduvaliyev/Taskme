@@ -13,7 +13,7 @@ const WelcomeDashboard = () => {
     const fetchUsage = async () => {
       try {
         const token = localStorage.getItem('token');
-        const res = await fetch('http://localhost:4000/api/v1/company/usage', {
+        const res = await fetch('https://eventify.preview.uz/api/v1/company/usage', {
           headers: { Authorization: `Bearer ${token}` }
         });
         const data = await res.json();

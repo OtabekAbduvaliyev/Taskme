@@ -34,19 +34,89 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
     const chatContainerRef = useRef(null); // Ref for chat container
     const [showScrollButton, setShowScrollButton] = useState(false);
     // Placeholder for files (replace with real logic as needed)
-    const [files, setFiles] = useState([]); // [{id, name, url, uploadedAt, uploadedBy}]
+    const [files, setFiles] = useState([]); // [{id, name, path, uploadedAt, uploadedBy}]
     const [activityLogs, setActivityLogs] = useState([]);
     const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+    const [uploading, setUploading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState({}); // key: filename -> percent
+
+    // public host for direct file URLs (used in <img src> and direct links)
+    const FILE_HOST = "https://eventify.preview.uz";
+    // upload endpoint (use axiosInstance for uploads)
+    const UPLOAD_ENDPOINT = "task/upload";
+
+    // helper to build public URL
+    const getFileUrl = (file) => {
+        const rawPath = file?.path || file?.url || "";
+        const cleaned = rawPath.replace(/^\/+/, "");
+        return `${FILE_HOST}/${cleaned}`;
+    };
+
+    // Download helper: fetch file as blob then download (ensures download works cross-origin)
+    const downloadFile = async (file, e) => {
+        if (e && typeof e.stopPropagation === "function") e.stopPropagation();
+        try {
+            const url = getFileUrl(file);
+            const res = await fetch(url);
+            if (!res.ok) throw new Error("Network response was not ok");
+            const blob = await res.blob();
+            const filename = file.originalName || file.name || (file.path?.split?.("/").pop?.()) || "file";
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = blobUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(blobUrl);
+        } catch (err) {
+            console.error("Download failed:", err);
+        }
+    };
 
     // Keep members in sync with task prop
     useEffect(() => {
         setMembers(task?.members || []);
     }, [task]);
 
+    // Fetch files when sidebar opens or task changes
+    useEffect(() => {
+        const fetchFiles = async () => {
+            if (!isOpen || !task?.id) return;
+            try {
+                const token = localStorage.getItem("token");
+                const res = await axiosInstance.get(`/task/${task.id}/files`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                // Expecting array of files; fallback to []
+                setFiles(Array.isArray(res.data) ? res.data : (res.data?.files || []));
+            } catch (e) {
+                console.error("Error fetching files:", e);
+                setFiles([]);
+            }
+        };
+        fetchFiles();
+    }, [isOpen, task?.id]);
+
     // Open modal and set selected members to current task members
     const handleOpenMemberModal = () => {
         setSelectedMemberIds((task?.members || []).map((m) => m.id));
         setShowMemberModal(true);
+    };
+
+    // delete file directly from Files tab (no confirmation)
+    const deleteFileFromTask = async (file) => {
+        if (!file?.id || !task?.id) return;
+        try {
+            const token = localStorage.getItem("token");
+            await axiosInstance.delete(`/task/${task.id}/files`, {
+                data: { fileIds: [file.id] },
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            setFiles((prev) => prev.filter((f) => f.id !== file.id));
+        } catch (e) {
+            console.error("Error deleting file:", e);
+        }
     };
 
     // Toggle member selection
@@ -168,6 +238,120 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                 .finally(() => setIsLoadingLogs(false));
         }
     }, [activeTab, task?.id]);
+
+    // Add state to track expanded activity items
+    const [expandedLogs, setExpandedLogs] = useState([]);
+
+    const toggleExpandLog = (id) => {
+        setExpandedLogs((prev) =>
+            prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+        );
+    };
+
+    // new: upload queue for modern UI (per-file progress / preview)
+    const [uploadQueue, setUploadQueue] = useState([]); // { id, file, preview, size, progress, status }
+
+    // utility: format bytes
+    const formatBytes = (bytes) => {
+        if (!bytes) return "0 B";
+        const sizes = ["B", "KB", "MB", "GB", "TB"];
+        const i = Math.floor(Math.log(bytes) / Math.log(1024));
+        return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${sizes[i]}`;
+    };
+
+    // Upload a single file and update queue progress
+    const uploadSingle = async (item) => {
+        setUploadQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, status: "uploading", progress: 0 } : q)));
+        const form = new FormData();
+        form.append("files", item.file);
+        form.append("taskId", task.id);
+
+        try {
+            const token = localStorage.getItem("token");
+            const res = await axiosInstance.post(UPLOAD_ENDPOINT, form, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "multipart/form-data",
+                },
+                onUploadProgress: (progressEvent) => {
+                    if (!progressEvent.total) return;
+                    const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                    setUploadQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, progress: percent } : q)));
+                },
+            });
+
+            // merge server-returned files into files list
+            const returned =
+                (res?.data && (res.data.data || res.data.files || (Array.isArray(res.data) ? res.data : null))) || [];
+
+            if (returned && returned.length) {
+                setFiles((prev) => [...returned, ...prev]);
+            }
+
+            setUploadQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, status: "done", progress: 100 } : q)));
+        } catch (err) {
+            console.error("Upload failed for", item.file.name, err);
+            setUploadQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, status: "error" } : q)));
+        } finally {
+            // release preview URL after a short delay so UI shows thumbnail briefly
+            setTimeout(() => {
+                setUploadQueue((prev) => prev.filter((q) => q.id !== item.id || q.status !== "done"));
+            }, 1200);
+        }
+    };
+
+    // updated: handle file input change to enqueue files and upload individually
+    const handleFileChange = async (e) => {
+        const selected = Array.from(e.target.files || []);
+        if (!selected.length || !task?.id) return;
+
+        const items = selected.map((file, idx) => {
+            const id = `${Date.now()}_${idx}`;
+            return {
+                id,
+                file,
+                preview: /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(file.name) ? URL.createObjectURL(file) : null,
+                size: file.size,
+                progress: 0,
+                status: "queued",
+            };
+        });
+
+        // add to queue and start uploading each
+        setUploadQueue((prev) => [...items, ...prev]);
+        // clear input
+        e.target.value = "";
+
+        // upload sequentially (or concurrently if you prefer)
+        for (const it of items) {
+            // ensure task still exists
+            if (!task?.id) break;
+            /* eslint-disable no-await-in-loop */
+            await uploadSingle(it);
+            /* eslint-enable no-await-in-loop */
+        }
+    };
+
+    // drag-n-drop handlers
+    const handleDrop = (e) => {
+        e.preventDefault();
+        if (!e.dataTransfer) return;
+        const files = Array.from(e.dataTransfer.files || []);
+        // create a fake input event shape
+        const fakeEvent = { target: { files } };
+        handleFileChange(fakeEvent);
+    };
+    const handleDragOver = (e) => e.preventDefault();
+
+    // cleanup previews on unmount
+    useEffect(() => {
+        return () => {
+            uploadQueue.forEach((q) => {
+                if (q.preview) URL.revokeObjectURL(q.preview);
+            });
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     return (
         <AnimatePresence>
@@ -479,6 +663,64 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                     )}
                     {activeTab === "files" && (
                         <div className="flex-1 flex flex-col px-4 py-4 bg-[#23272F] custom-scrollbar">
+                            {/* Drag & Drop area */}
+                            <div
+                                className="border-2 border-dashed border-[#2A2D36] rounded-lg p-4 mb-4 flex flex-col md:flex-row items-center gap-4"
+                                onDrop={handleDrop}
+                                onDragOver={handleDragOver}
+                                role="button"
+                                tabIndex={0}
+                                onKeyDown={() => {}}
+                            >
+                                <div className="flex-1 text-center md:text-left">
+                                    <div className="text-white font-semibold">Drag & drop files here</div>
+                                    <div className="text-gray4 text-sm mt-1">or click to select files. Supports images, docs and more.</div>
+                                </div>
+                                <label className="inline-flex items-center gap-2 cursor-pointer">
+                                    <div className="px-3 py-2 bg-pink2 text-white rounded-md font-medium">Select files</div>
+                                    <input
+                                        type="file"
+                                        multiple
+                                        onChange={handleFileChange}
+                                        className="hidden"
+                                    />
+                                </label>
+                            </div>
+
+                            {/* Upload queue (in-progress and recently finished) */}
+                            {uploadQueue.length > 0 && (
+                                <div className="mb-4">
+                                    <div className="text-white font-semibold mb-2">Uploading</div>
+                                    <div className="grid grid-cols-1 gap-2">
+                                        {uploadQueue.map((q) => (
+                                            <div key={q.id} className="flex items-center gap-3 bg-[#1F1F1F] rounded-lg px-3 py-2">
+                                                <div className="w-12 h-12 rounded overflow-hidden bg-[#111] flex items-center justify-center border border-[#2A2D36]">
+                                                    {q.preview ? <img src={q.preview} alt={q.file.name} className="w-full h-full object-cover" /> : <FaRegFolderOpen className="text-pink2 w-6 h-6" />}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="text-white truncate">{q.file.name}</div>
+                                                    <div className="flex items-center gap-3 mt-1">
+                                                        <div className="h-2 bg-[#2A2D36] rounded-md flex-1 overflow-hidden">
+                                                            <div style={{ width: `${q.progress}%` }} className={`h-2 bg-pink2 rounded-md transition-all`} />
+                                                        </div>
+                                                        <div className="text-xs text-gray4 whitespace-nowrap">{q.progress}%</div>
+                                                        <div className="text-xs text-gray4">· {formatBytes(q.size)}</div>
+                                                    </div>
+                                                    {q.status === "error" && <div className="text-xs text-red-500 mt-1">Upload failed</div>}
+                                                </div>
+                                                <div className="flex items-center gap-2 ml-2">
+                                                    {q.status === "uploading" ? (
+                                                        <button className="text-gray4 px-2 py-1 rounded" title="Uploading" disabled>…</button>
+                                                    ) : q.status === "error" ? (
+                                                        <button onClick={() => uploadSingle(q)} className="text-yellow-400 px-2 py-1 rounded" title="Retry">Retry</button>
+                                                    ) : null}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Files List */}
                             {(!files || files.length === 0) ? (
                                 <div className="text-gray4 text-center mt-10">
@@ -487,39 +729,53 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                                 </div>
                             ) : (
                                 <ul className="flex flex-col gap-3">
-                                    {files.map((file) => (
-                                        <li key={file.id} className="flex items-center gap-3 bg-[#2A2D36] rounded-lg px-3 py-2">
-                                            <FaRegFolderOpen className="text-pink2" />
-                                            <a
-                                                href={file.url}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-white hover:underline"
-                                            >
-                                                {file.name}
-                                            </a>
-                                            <span className="text-xs text-gray4 ml-auto">
-                                                {file.uploadedBy?.user?.firstName || "User"} • {dayjs(file.uploadedAt).format("MMM D, HH:mm")}
-                                            </span>
-                                        </li>
-                                    ))}
+                                    {files.map((file) => {
+                                        const isImage = /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(file.path || file.url || "");
+                                        const url = getFileUrl(file);
+                                        return (
+                                            <li key={file.id} className="flex items-center gap-3 bg-[#2A2D36] rounded-lg px-3 py-2">
+                                                <div className="w-12 h-12 rounded overflow-hidden bg-[#1f1f1f] flex items-center justify-center border border-[#2A2D36] flex-shrink-0">
+                                                    {isImage ? (
+                                                        <img src={url} alt={file.name} className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        <FaRegFolderOpen className="text-pink2 w-6 h-6" />
+                                                    )}
+                                                </div>
+            
+                                                {/* Main info: filename (truncated) and timestamp underneath */}
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="text-white truncate">{file.originalName || file.name || file.path?.split?.("/").pop?.() || "file"}</div>
+                                                    <div className="text-xs text-gray4 mt-1">
+                                                        {file.createdAt ? dayjs(file.createdAt).format("MMM D, HH:mm") : (file.uploadedAt ? dayjs(file.uploadedAt).format("MMM D, HH:mm") : "")}
+                                                    </div>
+                                                </div>
+            
+                                                {/* Actions: download + delete — always visible on the right */}
+                                                <div className="flex items-center gap-2 ml-2">
+                                                    <button
+                                                        onClick={(e) => downloadFile(file, e)}
+                                                        className="text-gray4 px-2 py-1 rounded hover:text-white bg-transparent"
+                                                        title="Download"
+                                                    >
+                                                        ⬇
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); deleteFileFromTask(file); }}
+                                                        className="text-red-500 px-2 py-1 rounded hover:text-red-400"
+                                                        title="Delete"
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                </div>
+                                            </li>
+                                        );
+                                    })}
                                 </ul>
                             )}
-                            {/* File Upload (placeholder) */}
-                            <div className="mt-6">
-                                <label className="block text-sm text-gray4 mb-2">Upload file</label>
-                                <input
-                                    type="file"
-                                    className="block w-full text-sm text-gray4 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-pink2 file:text-white hover:file:bg-pink"
-                                    // onChange={handleFileUpload} // Implement upload logic as needed
-                                    disabled
-                                />
-                                <span className="text-xs text-gray4 mt-1 block">File upload coming soon.</span>
-                            </div>
                         </div>
                     )}
                     {activeTab === "activity" && (
-                        <div className="flex-1 flex flex-col px-4 py-4 bg-[#23272F] custom-scrollbar">
+                        <div className="flex-1 flex flex-col px-4 py-4 bg-[#23272F] custom-scrollbar overflow-y-auto pb-4">
                             <div className="font-bold text-lg text-white mb-4">Activity Log</div>
                             {isLoadingLogs ? (
                                 <div className="text-gray4 text-center mt-10">Loading...</div>
@@ -531,19 +787,101 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                                         </div>
                                     ) : (
                                         <ul className="flex flex-col gap-3">
-                                            {activityLogs.map((log, idx) => (
-                                                <li key={log.id || idx} className="bg-[#2A2D36] rounded-lg px-3 py-2 flex flex-col">
-                                                    <span className="text-white text-sm font-semibold">
-                                                        {log.user?.firstName || "User"} {log.user?.lastName || ""}
-                                                    </span>
-                                                    <span className="text-gray4 text-xs">
-                                                        {dayjs(log.createdAt).format("MMM D, HH:mm")}
-                                                    </span>
-                                                    <span className="text-white text-[15px] mt-1 break-words">
-                                                        {log.action || log.description || ""}
-                                                    </span>
-                                                </li>
-                                            ))}
+                                            {activityLogs.map((log, idx) => {
+                                                const id = log.id || idx;
+                                                const user = log.user || {};
+                                                const avatarSrc = user.avatar?.path
+                                                    ? `https://eventify.preview.uz/${user.avatar.path}`
+                                                    : testMemImg;
+                                                // Compose a short action summary; prefer provided action/description, fallback to updatedKey info
+                                                const actionSummary =
+                                                    log.action ||
+                                                    log.description ||
+                                                    (log.updatedKey
+                                                        ? `Changed "${log.updatedKey}"`
+                                                        : "Updated");
+
+                                                return (
+                                                    <li
+                                                        key={id}
+                                                        className="bg-[#2A2D36] rounded-lg px-3 py-2 flex flex-col"
+                                                    >
+                                                        <div className="flex items-start gap-3">
+                                                            <img
+                                                                src={avatarSrc}
+                                                                alt={user.firstName || "User"}
+                                                                className="w-10 h-10 rounded-full border-2 border-[#23272F] object-cover flex-shrink-0"
+                                                            />
+                                                            <div className="flex-1">
+                                                                <div className="flex items-center justify-between gap-2">
+                                                                    <div>
+                                                                        <div className="text-white text-sm font-semibold">
+                                                                            {user.firstName || "User"} {user.lastName || ""}
+                                                                        </div>
+                                                                        <div className="text-gray4 text-xs">
+                                                                            {user.email || ""}
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="text-gray4 text-xs">
+                                                                        {dayjs(log.createdAt).format("MMM D, HH:mm")}
+                                                                    </div>
+                                                                </div>
+
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => toggleExpandLog(id)}
+                                                                    className="w-full text-left mt-2"
+                                                                    aria-expanded={expandedLogs.includes(id)}
+                                                                >
+                                                                    <div className="flex items-center justify-between gap-2">
+                                                                        <div className="text-white text-sm break-words">
+                                                                            {actionSummary}
+                                                                        </div>
+                                                                        <div className="text-gray4">
+                                                                            {/* simple chevron/arrow that rotates when open */}
+                                                                            <svg
+                                                                                className={`w-4 h-4 transform transition-transform ${expandedLogs.includes(id) ? "rotate-90" : ""}`}
+                                                                                viewBox="0 0 24 24"
+                                                                                fill="none"
+                                                                                xmlns="http://www.w3.org/2000/svg"
+                                                                            >
+                                                                                <path d="M9 6L15 12L9 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                                                            </svg>
+                                                                        </div>
+                                                                    </div>
+                                                                </button>
+
+                                                                {expandedLogs.includes(id) && (
+                                                                    <div className="mt-3 bg-[#23272F] rounded-md p-3 text-sm text-white">
+                                                                        {/* Show old -> new with pointer icon */}
+                                                                        <div className="flex items-center gap-2 break-words">
+                                                                            <div className="text-gray4">Old:</div>
+                                                                            <div className="text-white font-medium">
+                                                                                {typeof log.oldValue === "string" && log.oldValue !== "" ? log.oldValue : (log.oldValue ?? "—")}
+                                                                            </div>
+                                                                            <div className="text-pink2 px-1">
+                                                                                {/* pointer icon */}
+                                                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                                                                                    <path d="M5 12H19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                                                                    <path d="M12 5L19 12L12 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                                                                </svg>
+                                                                            </div>
+                                                                            <div className="text-white font-medium">
+                                                                                {typeof log.newValue === "string" && log.newValue !== "" ? log.newValue : (log.newValue ?? "—")}
+                                                                            </div>
+                                                                        </div>
+                                                                        {log.updatedKey && (
+                                                                            <div className="text-gray4 text-xs mt-2">
+                                                                                Field: <span className="text-white">{log.updatedKey}</span>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </li>
+                                                );
+                                            })}
                                         </ul>
                                     )}
                                 </>
@@ -557,5 +895,6 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
 };
 
 export default TaskChatSidebar;
+
 
 

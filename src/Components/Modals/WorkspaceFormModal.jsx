@@ -7,8 +7,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 const WorkspaceFormModal = ({ isOpen, onClose, isEditing, workspaceName, onWorkspaceNameChange, onSubmit }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
+    // Only submit if there's a non-empty, trimmed name
+    if (!workspaceName || !workspaceName.name || !workspaceName.name.trim()) return;
     onSubmit();
   };
+
+  const currentLength = workspaceName?.name?.length || 0;
+  const maxLength = 20;
 
   return createPortal(
     <AnimatePresence>
@@ -84,11 +89,18 @@ const WorkspaceFormModal = ({ isOpen, onClose, isEditing, workspaceName, onWorks
                       name="name"
                       value={workspaceName.name}
                       onChange={onWorkspaceNameChange}
+                      maxLength={maxLength}
                       className="w-full bg-[#2A2A2A] border-2 border-[#3A3A3A] rounded-xl py-3 px-4 text-white placeholder:text-[#777C9D] focus:outline-none focus:border-pink2 focus:ring-1 focus:ring-pink2/50 transition-all duration-300"
                       placeholder="Enter workspace name"
                     />
                     <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-pink2/20 to-pink2/20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
                   </motion.div>
+                  {/* character count */}
+                  <div className="flex justify-end mt-1">
+                    <span className={`text-xs ${currentLength === maxLength ? 'text-red-400' : 'text-[#777C9D]'}`}>
+                      {currentLength}/{maxLength}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="flex gap-3 pt-2">

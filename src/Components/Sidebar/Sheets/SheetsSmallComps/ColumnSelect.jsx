@@ -18,6 +18,7 @@ const ColumnSelect = ({ handleChange, column }) => {
         <option value="DATE">Date</option>
         <option value="CHECK">Check</option>
         <option value="SELECT">Select</option>
+        <option value="DUEDATE">Due Date</option>
       </select>
 
       {/* Custom dropdown arrow */}

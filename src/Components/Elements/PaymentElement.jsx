@@ -15,7 +15,7 @@ function PaymentForm({ plan, onSuccess, onCancel }) {
 
     try {
       // 1) Create payment intent on your backend
-      const createRes = await fetch("http://localhost:4000/api/v1/payment/inline", {
+      const createRes = await fetch("https://eventify.preview.uz/api/v1/payment/inline", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ planId: plan.id })
@@ -44,7 +44,7 @@ function PaymentForm({ plan, onSuccess, onCancel }) {
 
       // 3) Success — notify backend to finalize subscription
       if (result.paymentIntent && result.paymentIntent.status === "succeeded") {
-        await fetch("http://localhost:4000/api/v1/payment/inline/confirm", {
+        await fetch("https://eventify.preview.uz/api/v1/payment/inline/confirm", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

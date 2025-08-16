@@ -33,7 +33,7 @@ const handleSubmit = async (e) => {
 
   try {
     // 1) Create payment intent
-    const createRes = await fetch("http://localhost:4000/api/v1/payment/inline", {
+    const createRes = await fetch("https://eventify.preview.uz/api/v1/payment/inline", {
       method: "POST",
       headers: { 
         "Content-Type": "application/json",
@@ -66,7 +66,7 @@ const handleSubmit = async (e) => {
 
     if (result.paymentIntent && result.paymentIntent.status === "succeeded") {
       // 4) Notify backend to confirm subscription
-      await fetch("http://localhost:4000/api/v1/payment/inline/confirm", {
+      await fetch("https://eventify.preview.uz/api/v1/payment/inline/confirm", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",

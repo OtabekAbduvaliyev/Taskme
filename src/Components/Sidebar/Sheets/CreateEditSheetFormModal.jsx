@@ -18,7 +18,8 @@ const ColumnType = {
   NUMBER: "NUMBER",
   DATE: "DATE",
   CHECK: "CHECK",
-  MEMEBERS: "MEMBERS",
+  MEMBERS: "MEMBERS",
+  DUEDATE: "DUEDATE",
 };
 
 const CreateSheetFormModal = ({

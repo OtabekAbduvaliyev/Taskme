@@ -1,17 +1,40 @@
 import { AnimatePresence,motion } from 'framer-motion';
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { FaRegTrashAlt } from 'react-icons/fa';
 import { GoFileSymlinkFile } from 'react-icons/go';
 import { IoIosArrowForward } from 'react-icons/io';
 import { IoClose } from 'react-icons/io5';
+import SelecterMobile from './SelecterMobile';
 
 const Selecter = ({ selectedTasks, setItemsPerPage, setCurrentPage,itemsPerPage,currentPage,filteredTasks,setSelectedTasks,handleMoveTask,setDeleteModalOpen,isHidden, handleDeleteTasks }) => {
+  // detect mobile (simple)
+  const [isMobile, setIsMobile] = useState(typeof window !== "undefined" ? window.innerWidth <= 768 : false);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
-  
   return (
     <div className={`${isHidden ? "block" : "block"} `}>
       <AnimatePresence mode="wait">
-        {(selectedTasks?.length > 0 || true) && (
+        {isMobile ? (
+          // render mobile variant
+          <SelecterMobile
+            selectedTasks={selectedTasks}
+            setItemsPerPage={setItemsPerPage}
+            setCurrentPage={setCurrentPage}
+            itemsPerPage={itemsPerPage}
+            currentPage={currentPage}
+            filteredTasks={filteredTasks}
+            setSelectedTasks={setSelectedTasks}
+            handleMoveTask={handleMoveTask}
+            setDeleteModalOpen={setDeleteModalOpen}
+            isHidden={isHidden}
+            handleDeleteTasks={handleDeleteTasks}
+          />
+        ) : (
+          // Desktop UI: unchanged markup (keeps original behavior)
           <motion.div
             key={
               selectedTasks?.length > 0

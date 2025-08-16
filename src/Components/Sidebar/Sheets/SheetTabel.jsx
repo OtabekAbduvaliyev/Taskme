@@ -14,9 +14,10 @@ import AnimatedNoData from "./SheetsSmallComps/AnimatedNoData";
 import swal from "sweetalert";
 import { AnimatePresence, motion } from "framer-motion";
 import DeleteConfirmationModal from "../../Modals/DeleteConfirmationModal";
-import { Dropdown, Menu } from "antd";
+import { Dropdown, Menu, Select } from "antd";
 import { MdEdit, MdDelete } from "react-icons/md";
 import TaskChatSidebar from "./SheetsSmallComps/TaskChatSidebar";
+import dayjs from "dayjs";
 
 const SheetTabel = ({
   tasks = [],
@@ -60,6 +61,88 @@ const SheetTabel = ({
   const [chatTask, setChatTask] = useState(null);
   const token = localStorage.getItem("token");
   const { createColumn, dndOrdersTasks } = useContext(AuthContext);
+
+  // Helper: derive select options from sheets.columns (same source as desktop table)
+  const getColumnOptions = (key) => {
+    if (!sheets?.columns || !key) return [];
+    const lower = key.toLowerCase();
+    const col = sheets.columns.find((c) => {
+      if (!c) return false;
+      const cKey = (c.key || "").toString().toLowerCase();
+      const cName = (c.name || "").toString().toLowerCase();
+      return cKey === lower || cName === lower;
+    });
+    const opts = col?.selects?.[0]?.options || [];
+    return opts.map((o) => ({ value: o.name, label: o.name, bg: o.color || "#6B7280" }));
+  };
+
+  const builtinPriorityOptions = [
+    { value: "Low", label: "Low", bg: "#0EC359" },
+    { value: "Medium", label: "Medium", bg: "#BF7E1C" },
+    { value: "High", label: "High", bg: "#DC5091" },
+  ];
+
+  // Mobile edit modal state (to behave like desktop inline edit)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingTaskForModal, setEditingTaskForModal] = useState(null);
+  const [isSavingModalTask, setIsSavingModalTask] = useState(false);
+
+  // --- Mobile edit helpers (open/close/update/save) ---
+  const openEditModal = (task) => {
+    // derive available options (use same source as desktop)
+    const statusOptions = getColumnOptions("status");
+    const priorityOptions = getColumnOptions("priority").length
+      ? getColumnOptions("priority")
+      : builtinPriorityOptions;
+
+    const defaultStatus = task?.status || statusOptions[0]?.value || "";
+    const defaultPriority = task?.priority || priorityOptions[0]?.value || "";
+
+    setEditingTaskForModal({
+      ...task,
+      status: defaultStatus,
+      priority: defaultPriority,
+    });
+    setIsEditModalOpen(true);
+  };
+  const closeEditModal = () => {
+    setIsEditModalOpen(false);
+    setEditingTaskForModal(null);
+  };
+  const handleModalFieldChange = (field, value) => {
+    setEditingTaskForModal((prev) => ({ ...prev, [field]: value }));
+  };
+  const saveModalTask = async () => {
+    if (!editingTaskForModal) return;
+    setIsSavingModalTask(true);
+    try {
+      const payload = { ...editingTaskForModal };
+      // normalize members to ids if necessary
+      if (Array.isArray(payload.members) && payload.members.length && payload.members[0]?.id) {
+        payload.members = payload.members.map((m) => m.id);
+      }
+      await axiosInstance.patch(`/task/${payload.id}`, payload, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      // update local list like desktop inline save
+      setFilteredTasks((prev) => prev.map((t) => (t.id === payload.id ? { ...t, ...editingTaskForModal } : t)));
+      closeEditModal();
+    } catch (e) {
+      console.error("Error saving task (mobile modal):", e);
+    }
+    setIsSavingModalTask(false);
+  };
+  // --- end mobile edit helpers ---
+
+  // Mobile detection to switch to a compact card/list layout
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== "undefined" ? window.innerWidth <= 768 : false
+  );
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   const {
     isLoading,
@@ -404,142 +487,375 @@ const SheetTabel = ({
       />
 
       <DragDropContext onDragEnd={handleOnDragEnd}>
-        <div className="w-full overflow-x-auto sm:overflow-x-visible">
-          <table className="bg-grayDash font-radioCanada w-full min-w-max">
-            <thead className="border-1 text-white">
-              <tr className="flex border-[black] border-b">
-                {/* Sticky checkbox header cell */}
-                <td
-                  className="w-[44px] sm:w-[48px] py-[12px] sm:py-[16px] px-[8px] sm:px-[11px] flex items-center justify-center border-r border-r-[black] cursor-pointer bg-grayDash sticky left-0 z-30 top-0"
-                  onClick={handleSelectAllTasks}
+        <div className="w-full">
+          {isMobile ? (
+            // Mobile: chat-like dark card/list view (single-line title+badges, actions on right)
+            <div className="space-y-3 p-2">
+              {paginatedTasks.map((task) => (
+                <div
+                  key={task.id}
+                  className="bg-[#23272F] border border-[#2A2D36] rounded-lg p-3 flex items-start justify-between gap-3"
                 >
-                  <label className="relative flex items-center cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={selectedTasks.length === filteredTasks.length}
-                      readOnly
-                      className="peer appearance-none w-5 h-5 m-0 p-0 absolute opacity-0 cursor-pointer"
-                      style={{ zIndex: 2 }}
-                    />
-                    <span
-                      className={`
-                        w-5 h-5 rounded border-2 flex items-center justify-center
-                        transition-colors duration-150
-                        ${selectedTasks.length === filteredTasks.length ? "bg-pink2 border-pink2" : "bg-[#23272F] border-[#3A3A3A]"} peer-focus:ring-2 peer-focus:ring-pink2
-                      `}
-                      style={{ zIndex: 1 }}
-                    >
-                      {selectedTasks.length === filteredTasks.length && (
-                        <svg
-                          className="w-3 h-3 text-white"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="3"
-                          viewBox="0 0 24 24"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                        </svg>
-                      )}
-                    </span>
-                  </label>
-                </td>
-                <td
-                  className="w-[44px] sm:w-[48px] py-[12px] sm:py-[16px] px-[8px] sm:px-[11px] flex items-center justify-center border-r border-r-[black] cursor-pointer bg-grayDash sticky left-[44px] sm:left-[48px] z-30 top-0"
-                >
-                  <div className="chat w-[22px] h-[22px] sm:w-[25px] sm:h-[25px] flex items-center justify-center">
-                    <IoMdChatbubbles className="text-gray4 w-[22px] h-[22px] sm:w-[26px] sm:h-[26px]" />
-                  </div>
-                </td>
-                {/* Draggable Columns + Sticky Add Button */}
-                <td className="flex-grow">
-                  <Droppable
-                    droppableId="droppableColumns"
-                    direction="horizontal"
-                    type="COLUMN"
-                  >
-                    {(provided) => (
-                      <div
-                        className="flex relative"
-                        ref={provided.innerRef}
-                        {...provided.droppableProps}
+                  <div className="flex items-center gap-3 w-full">
+                    {/* checkbox styled like desktop for consistency */}
+                    <label className="relative flex items-center cursor-pointer select-none shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={selectedTasks.includes(task.id)}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          handleTaskSelect(task.id);
+                        }}
+                        className="peer appearance-none w-5 h-5 m-0 p-0 absolute opacity-0 cursor-pointer"
+                        style={{ zIndex: 2 }}
+                      />
+                      <span
+                        className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors duration-150 ${selectedTasks.includes(task.id) ? "bg-pink2 border-pink2" : "bg-[#353847] border-[#3A3A3A]"} peer-focus:ring-2 peer-focus:ring-pink2`}
+                        style={{ zIndex: 1 }}
                       >
-                        {sheets?.columns.map((column, index) => {
-                          const showColumn = column.show;
-                          // Make the first data column sticky (third column overall)
-                          const isFirst = index === 0;
-                          return (
-                            showColumn && (
-                              <Draggable
-                                key={column.id}
-                                draggableId={`column-${column.id}`}
-                                index={index}
+                        {selectedTasks.includes(task.id) && (
+                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </span>
+                    </label>
+
+                    {/* Content: single-line header with title + badges, then status row */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {/* Title (truncates) */}
+                          <div className="text-white font-medium text-sm truncate">
+                            {task.name || "Untitled"}
+                          </div>
+
+                          {/* Inline badges (priority + price) — will move to next line if space is tight */}
+                          <div className="flex items-center gap-2 shrink-0 ml-2">
+                            {task.priority && (
+                              <span
+                                className="px-2 py-0.5 rounded text-[11px] font-semibold text-white flex items-center"
+                                style={{
+                                  background:
+                                    task.priority === "High"
+                                      ? "#DC5091"
+                                      : task.priority === "Medium"
+                                      ? "#BF7E1C"
+                                      : "#0EC359",
+                                }}
                               >
-                                {(provided) => (
-                                  <Dropdown
-                                    overlay={getColumnMenu(column)}
-                                    trigger={["contextMenu"]}
-                                    placement="bottomLeft"
-                                  >
-                                    <div
-                                      className={`w-[140px] sm:w-[160px] md:w-[180px] flex items-center justify-between py-[12px] sm:py-[16px] border-r border-[black] px-[8px] sm:px-[11px] hide
-                                        ${isFirst ? "sticky left-[88px] sm:left-[96px] bg-grayDash top-0 z-20" : ""}
-                                      `}
-                                      ref={provided.innerRef}
-                                      {...provided.draggableProps}
-                                      {...provided.dragHandleProps}
-                                    >
-                                      {column.name}
-                                      <MdDragIndicator className="text-gray4 cursor-grab" />
-                                    </div>
-                                  </Dropdown>
-                                )}
-                              </Draggable>
-                            )
-                          );
-                        })}
+                                {task.priority}
+                              </span>
+                            )}
+                            {typeof task.price !== "undefined" && (
+                              <span className="text-pink2 font-bold text-sm whitespace-nowrap">
+                                ${task.price}
+                              </span>
+                            )}
+                          </div>
+                        </div>
 
-                        {provided.placeholder}
-
-                        {/* Sticky Add Button */}
-                        <div
-                          className="w-[44px] sm:w-[50px] flex items-end justify-center py-[12px] sm:py-[16px] border-r border-[black] px-[8px] sm:px-[11px] cursor-pointer bg-grayDash sticky right-0 top-0"
-                          onClick={handleToggleModal}
-                        >
-                          <IoAddCircleOutline className="text-[18px] sm:text-[20px] text-gray4" />
+                        {/* Actions (chat/edit/delete) — pinned to right */}
+                        <div className="flex items-center gap-2 shrink-0 ml-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenChatSidebar(task);
+                            }}
+                            className="text-gray4 p-1 rounded hover:text-white"
+                            aria-label="Chat"
+                          >
+                            <IoMdChatbubbles size={18} />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openEditModal(task);
+                            }}
+                            className="text-gray4 p-1 rounded hover:text-white"
+                            title="Edit"
+                          >
+                            <MdEdit size={18} />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setTasksToDelete([task.id]);
+                              setIsDeleteTaskModalOpen(true);
+                            }}
+                            className="text-red-500 p-1 rounded hover:text-red-400"
+                            title="Delete"
+                          >
+                            <MdDelete size={18} />
+                          </button>
                         </div>
                       </div>
-                    )}
-                  </Droppable>
-                </td>
-              </tr>
-            </thead>
 
-            <Droppable droppableId="droppable" direction="vertical" type="TASK">
-              {(provided) => (
-                <tbody ref={provided.innerRef} {...provided.droppableProps}>
-                  {paginatedTasks?.map((task, index) => (
-                    <tr key={task.id} className="flex border-b border-black ">
-                      <SheetTableItem
-                        task={task}
-                        columns={sheets?.columns.filter((_, idx) =>
-                          columnOrder.includes(idx)
-                        )}
-                        index={index}
-                        isSelected={selectedTasks.includes(task.id)}
-                        onSelect={handleTaskSelect}
-                        onEdit={() => setEditingTaskId(task.id)}
-                        onChange={handleColumnChange}
-                        stickyFirstThreeColumns
-                        onChatIconClick={() => handleOpenChatSidebar(task)}
-                        autoFocus={task.id === lastCreatedTaskIdRef.current && index === 0}
-                      />
-                    </tr>
-                  ))}
-                  {provided.placeholder}
-                </tbody>
+                      {/* Status / subtitle row (muted) */}
+                      {task.status && (
+                        <div className="text-xs text-gray4 mt-2 truncate">
+                          {task.status}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {/* Mobile Edit Task Modal (dark background like chat) */}
+              {isEditModalOpen && editingTaskForModal && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                  <div className="absolute inset-0 bg-black/40" onClick={closeEditModal} />
+                  <div className="relative w-full max-w-md bg-[#23272F] rounded-lg shadow-lg p-5 z-10 border border-[#2A2D36]">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-lg font-semibold text-white">Edit Task</h3>
+                      <button onClick={closeEditModal} className="text-gray4">✕</button>
+                    </div>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-sm text-gray4">Name</label>
+                        <input
+                          value={editingTaskForModal.name || ""}
+                          onChange={(e) => handleModalFieldChange("name", e.target.value)}
+                          className="mt-1 w-full bg-[#2A2D36] border border-[#353847] rounded px-3 py-2 text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm text-gray4">Status</label>
+                        <Select
+                          value={editingTaskForModal.status}
+                          onChange={(value) => handleModalFieldChange("status", value)}
+                          className="mt-1 w-full h-[38px] rounded-md bg-[#2A2D36] text-white border border-[#353847] px-2"
+                          dropdownMatchSelectWidth={false}
+                          dropdownClassName="custom-select-dropdown bg-[#23272F] rounded-md"
+                          getPopupContainer={(trigger) => trigger.parentElement}
+                        >
+                          {getColumnOptions("status").map((opt) => (
+                            <Select.Option key={opt.value} value={opt.value}>
+                              <span style={{ display: "flex", alignItems: "center", gap: 8, color: "#fff" }}>
+                                <span style={{ width: 10, height: 10, borderRadius: 4, background: opt.bg }} />
+                                <span>{opt.label}</span>
+                              </span>
+                            </Select.Option>
+                          ))}
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="text-sm text-gray4">Priority</label>
+                        <Select
+                          value={editingTaskForModal.priority}
+                          onChange={(value) => handleModalFieldChange("priority", value)}
+                          className="mt-1 w-full h-[38px] rounded-md bg-[#2A2D36] text-white border border-[#353847] px-2"
+                          dropdownMatchSelectWidth={false}
+                          dropdownClassName="custom-select-dropdown bg-[#23272F] rounded-md"
+                          getPopupContainer={(trigger) => trigger.parentElement}
+                        >
+                          {(getColumnOptions("priority").length ? getColumnOptions("priority") : builtinPriorityOptions).map(opt => (
+                            <Select.Option key={opt.value} value={opt.value}>
+                              <span style={{ display: "flex", alignItems: "center", gap: 8, color: "#fff" }}>
+                                <span style={{ width: 10, height: 10, borderRadius: 4, background: opt.bg }} />
+                                <span>{opt.label}</span>
+                              </span>
+                            </Select.Option>
+                          ))}
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="text-sm text-gray4">Price</label>
+                        <input
+                          type="number"
+                          value={editingTaskForModal.price || 0}
+                          onChange={(e) => handleModalFieldChange("price", Number(e.target.value))}
+                          className="mt-1 w-full bg-[#2A2D36] border border-[#353847] rounded px-3 py-2 text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm text-gray4">Link</label>
+                        <input
+                          value={editingTaskForModal.link || ""}
+                          onChange={(e) => handleModalFieldChange("link", e.target.value)}
+                          className="mt-1 w-full bg-[#2A2D36] border border-[#353847] rounded px-3 py-2 text-white"
+                          placeholder="https://example.com"
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2 pt-2">
+                        <button className="px-4 py-2 rounded bg-[#2A2D36] text-gray4" onClick={closeEditModal}>Cancel</button>
+                        <button className={`px-4 py-2 rounded bg-pink2 text-white ${isSavingModalTask ? "opacity-50 cursor-not-allowed" : "hover:shadow"}`} onClick={saveModalTask} disabled={isSavingModalTask}>
+                          {isSavingModalTask ? "Saving..." : "Save"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               )}
-            </Droppable>
-          </table>
+            </div>
+          ) : (
+            // Desktop/tablet: original table (unchanged)
+            <div className="w-full overflow-x-auto sm:overflow-x-visible">
+              <table className="bg-grayDash font-radioCanada w-full min-w-max">
+                <thead className="border-1 text-white">
+                  <tr className="flex border-[black] border-b">
+                    {/* Sticky checkbox header cell */}
+                    <td
+                      className="w-[44px] sm:w-[48px] py-[12px] sm:py-[16px] px-[8px] sm:px-[11px] flex items-center justify-center border-r border-r-[black] cursor-pointer bg-grayDash sticky left-0 z-30 top-0"
+                      onClick={handleSelectAllTasks}
+                    >
+                      <label className="relative flex items-center cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={
+                            selectedTasks.length === filteredTasks.length
+                          }
+                          readOnly
+                          className="peer appearance-none w-5 h-5 m-0 p-0 absolute opacity-0 cursor-pointer"
+                          style={{ zIndex: 2 }}
+                        />
+                        <span
+                          className={`
+                        w-5 h-5 rounded border-2 flex items-center justify-center
+                        transition-colors duration-150
+                        ${
+                          selectedTasks.length === filteredTasks.length
+                            ? "bg-pink2 border-pink2"
+                            : "bg-[#23272F] border-[#3A3A3A]"
+                        } peer-focus:ring-2 peer-focus:ring-pink2
+                      `}
+                          style={{ zIndex: 1 }}
+                        >
+                          {selectedTasks.length === filteredTasks.length && (
+                            <svg
+                              className="w-3 h-3 text-white"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="3"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M5 13l4 4L19 7"
+                              />
+                            </svg>
+                          )}
+                        </span>
+                      </label>
+                    </td>
+                    <td
+                      className="w-[44px] sm:w-[48px] py-[12px] sm:py-[16px] px-[8px] sm:px-[11px] flex items-center justify-center border-r border-r-[black] cursor-pointer bg-grayDash sticky left-[44px] sm:left-[48px] z-30 top-0"
+                    >
+                      <div className="chat w-[22px] h-[22px] sm:w-[25px] sm:h-[25px] flex items-center justify-center">
+                        <IoMdChatbubbles className="text-gray4 w-[22px] h-[22px] sm:w-[26px] sm:h-[26px]" />
+                      </div>
+                    </td>
+                    {/* Draggable Columns + Sticky Add Button */}
+                    <td className="flex-grow">
+                      <Droppable
+                        droppableId="droppableColumns"
+                        direction="horizontal"
+                        type="COLUMN"
+                      >
+                        {(provided) => (
+                          <div
+                            className="flex relative"
+                            ref={provided.innerRef}
+                            {...provided.droppableProps}
+                          >
+                            {sheets?.columns.map((column, index) => {
+                              const showColumn = column.show;
+                              // Make the first data column sticky (third column overall)
+                              const isFirst = index === 0;
+                              return (
+                                showColumn && (
+                                  <Draggable
+                                    key={column.id}
+                                    draggableId={`column-${column.id}`}
+                                    index={index}
+                                  >
+                                    {(provided) => (
+                                      <Dropdown
+                                        overlay={getColumnMenu(column)}
+                                        trigger={["contextMenu"]}
+                                        placement="bottomLeft"
+                                      >
+                                        <div
+                                          className={`w-[140px] sm:w-[160px] md:w-[180px] flex items-center justify-between py-[12px] sm:py-[16px] border-r border-[black] px-[8px] sm:px-[11px] hide
+                                        ${
+                                          isFirst
+                                            ? "sticky left-[88px] sm:left-[96px] bg-grayDash top-0 z-20"
+                                            : ""
+                                        }
+                                      `}
+                                          ref={provided.innerRef}
+                                          {...provided.draggableProps}
+                                          {...provided.dragHandleProps}
+                                        >
+                                          {column.name}
+                                          <MdDragIndicator className="text-gray4 cursor-grab" />
+                                        </div>
+                                      </Dropdown>
+                                    )}
+                                  </Draggable>
+                                )
+                              );
+                            })}
+
+                            {provided.placeholder}
+
+                            {/* Files header (new default column before Last update) */}
+                            <div className="w-[140px] sm:w-[160px] md:w-[180px] flex items-center justify-between py-[12px] sm:py-[16px] border-r border-[black] px-[8px] sm:px-[11px] bg-grayDash">
+                              <span className="text-white font-semibold">Files</span>
+                            </div>
+
+                            {/* Last update header (new default column at the end) */}
+                            <div className="w-[180px] sm:w-[180px] flex items-center justify-between py-[12px] sm:py-[16px] border-r border-[black] px-[8px] sm:px-[11px] bg-grayDash">
+                              <span className="text-white font-semibold">Last update</span>
+                            </div>
+
+                            {/* Sticky Add Button */}
+                            <div
+                              className="w-[44px] sm:w-[50px] flex items-end justify-center py-[12px] sm:py-[16px] border-r border-[black] px-[8px] sm:px-[11px] cursor-pointer bg-grayDash sticky right-0 top-0"
+                              onClick={handleToggleModal}
+                            >
+                              <IoAddCircleOutline className="text-[18px] sm:text-[20px] text-gray4" />
+                            </div>
+                          </div>
+                        )}
+                      </Droppable>
+                    </td>
+                  </tr>
+                </thead>
+
+                <Droppable droppableId="droppable" direction="vertical" type="TASK">
+                  {(provided) => (
+                    <tbody ref={provided.innerRef} {...provided.droppableProps}>
+                      {paginatedTasks?.map((task, index) => (
+                        <tr key={task.id} className="flex border-b border-black ">
+                          <SheetTableItem
+                            task={task}
+                            columns={sheets?.columns.filter((_, idx) =>
+                              columnOrder.includes(idx)
+                            )}
+                            index={index}
+                            isSelected={selectedTasks.includes(task.id)}
+                            onSelect={handleTaskSelect}
+                            onEdit={() => setEditingTaskId(task.id)}
+                            onChange={handleColumnChange}
+                            stickyFirstThreeColumns
+                            onChatIconClick={() => handleOpenChatSidebar(task)}
+                            autoFocus={
+                              task.id === lastCreatedTaskIdRef.current &&
+                              index === 0
+                            }
+                          />
+                        </tr>
+                      ))}
+                      {provided.placeholder}
+                    </tbody>
+                  )}
+                </Droppable>
+              </table>
+            </div>
+          )}
         </div>
       </DragDropContext>
       {/* Chat Sidebar */}

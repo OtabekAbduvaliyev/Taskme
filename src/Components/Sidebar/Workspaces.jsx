@@ -297,12 +297,21 @@ console.log(currentPlan);
      // eslint-disable-next-line react-hooks/exhaustive-deps
    }, [user]);
 
-  // Determine workspace add eligibility
+  // Determine workspace add eligibility (treat -1 as unlimited)
   const workspaceLimitReached =
     currentPlan &&
     typeof currentPlan.maxWorkspaces === "number" &&
+    currentPlan.maxWorkspaces !== -1 && // <- do not enforce limit when -1
     workspacesData &&
     workspacesData.length >= currentPlan.maxWorkspaces;
+
+  // human-friendly display for max workspaces
+  const displayMaxWorkspaces =
+    currentPlan && typeof currentPlan.maxWorkspaces === "number"
+      ? currentPlan.maxWorkspaces === -1
+        ? "Unlimited"
+        : currentPlan.maxWorkspaces
+      : "";
 
   return (
     <div className="bg-grayDash py-3 sm:py-[14px] md:py-[16px] px-3 sm:px-[15px] md:px-[17px] rounded-[17px] font-radioCanada mt-[18px] shadow-xl">
@@ -433,7 +442,7 @@ console.log(currentPlan);
           </button>
           {workspaceLimitReached && (
             <p className="text-red-400 text-xs mt-1">
-              Workspace limit reached for your plan ({currentPlan.maxWorkspaces}). Upgrade to add more.
+              Workspace limit reached for your plan ({displayMaxWorkspaces}). Upgrade to add more.
             </p>
           )}
           <UpgradePlanModal

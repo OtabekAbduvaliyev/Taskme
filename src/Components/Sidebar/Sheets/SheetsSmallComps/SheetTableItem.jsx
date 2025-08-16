@@ -14,6 +14,11 @@ import { IoClose } from "react-icons/io5";
 import InviteMemberModal from "../../../Modals/InviteMemberModal";
 import { SketchPicker } from "react-color";
 import ReactDOM from "react-dom";
+import { FaRegFileAlt } from "react-icons/fa";
+import DeleteConfirmationModal from "../../../Modals/DeleteConfirmationModal";
+import dayjs from "dayjs";
+import { DatePicker as AntdDatePicker } from "antd";
+const { RangePicker: AntdRangePicker } = AntdDatePicker;
 
 const SheetTableItem = ({
   task,
@@ -28,27 +33,49 @@ const SheetTableItem = ({
   autoFocus, // <-- new prop
 }) => {
   const handleInputChange = (taskKey, e) => {
-    let value = e?.target?.value;
+    const key = String(taskKey).toLowerCase();
 
+    // Numeric-ish fields
     if (
       ["price", "order", "number1", "number2", "number3", "number4", "number5"].includes(
-        taskKey.toLowerCase()
+        key
       )
     ) {
-      value = parseFloat(value) || 0;
+      const raw = e?.target?.value;
+      const num = parseFloat(raw);
+      onChange(task.id, taskKey, isNaN(num) ? 0 : num);
+      return;
+    }
+
+    // Single date fields -> send single "YYYY-MM-DD" string
+    if (/^date[1-5]$/i.test(key)) {
+      const value =
+        e && typeof e === "object" && typeof e.format === "function"
+          ? e.format("YYYY-MM-DD")
+          : "";
       onChange(task.id, taskKey, value);
       return;
     }
 
-    if (
-      ["date1", "date2", "date3", "date4", "date5"].includes(taskKey.toLowerCase())
-    ) {
-      value = e ? e.toISOString().slice(0, 10) : null;
+    // Duedate fields (single "duedate" or numbered duedate1..5) -> always send array ["YYYY-MM-DD","YYYY-MM-DD"]
+    if (/^duedate(?:[1-5])?$/i.test(key)) {
+      let value;
+      if (Array.isArray(e) && e.length === 2) {
+        value = [
+          e[0] && typeof e[0].format === "function" ? e[0].format("YYYY-MM-DD") : "",
+          e[1] && typeof e[1].format === "function" ? e[1].format("YYYY-MM-DD") : "",
+        ];
+      } else {
+        // cleared or invalid -> keep consistent array shape
+        value = ["", ""];
+      }
       onChange(task.id, taskKey, value);
       return;
     }
 
-    onChange(task.id, taskKey, value);
+    // Default: pass through value from input event (if any)
+    const fallback = e?.target?.value ?? "";
+    onChange(task.id, taskKey, fallback);
   };
 
   const { members: companyMembers, user } = useContext(AuthContext);
@@ -78,6 +105,13 @@ const SheetTableItem = ({
   const [editOptions, setEditOptions] = useState({});
   const [savingOptionId, setSavingOptionId] = useState(null);
   const [deletingOptionId, setDeletingOptionId] = useState(null);
+
+  // State for file preview modal
+  const [showFileModal, setShowFileModal] = useState(false);
+  const [selectedFileIndex, setSelectedFileIndex] = useState(0);
+  const [fileToDelete, setFileToDelete] = useState(null);
+  const [isDeletingFile, setIsDeletingFile] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Open modal and set selected members to current task members
   const handleOpenMemberModal = () => {
@@ -224,6 +258,16 @@ const SheetTableItem = ({
   // User info state
   const [userInfo, setUserInfo] = useState(null);
 
+  // Map specific keys (status, etc.) to select options so they behave like priority
+  const KEY_SELECT_OPTIONS = {
+    status: [
+      { value: "To Do", label: "To Do", bg: "#6B7280" },
+      { value: "In Progress", label: "In Progress", bg: "#BF7E1C" },
+      { value: "Done", label: "Done", bg: "#0EC359" },
+    ],
+    // add other keys here if you want mapped selects, e.g. stage, progress...
+  };
+  
   useEffect(() => {
     const fetchUserInfo = async () => {
       try {
@@ -250,12 +294,83 @@ const SheetTableItem = ({
     }
   }, [autoFocus]);
 
+  // Use same host pattern as other places: https://eventify.preview.uz/<path>
+  const getFileUrl = (file) => {
+    const rawPath = file?.path || "";
+    const cleaned = rawPath.replace(/^\/+/, ""); // remove leading slashes
+    return `https://eventify.preview.uz/${cleaned}`;
+  };
+
+  // download via fetch to ensure proper download behavior (works across hosts)
+  const downloadFile = async (file) => {
+    try {
+      const url = getFileUrl(file);
+      const filename = (file.path || "").split("/").pop() || file.id || "file";
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error("Download failed:", err);
+    }
+  };
+  
+  const confirmDeleteFile = (file) => {
+    setFileToDelete(file);
+    setShowDeleteConfirm(true);
+  };
+  
+  const handleDeleteFile = async () => {
+    if (!fileToDelete) return;
+    setIsDeletingFile(true);
+    try {
+      const token = localStorage.getItem("token");
+      await axiosInstance.delete(`/task/${task.id}/files`, {
+        data: { fileIds: [fileToDelete.id] },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      // notify parent to refresh if onEdit available
+      if (typeof onEdit === "function") onEdit();
+      // close modal and reset selection
+      setShowDeleteConfirm(false);
+      setFileToDelete(null);
+      setShowFileModal(false);
+    } catch (e) {
+      console.error("Error deleting file:", e);
+      setShowDeleteConfirm(false);
+    }
+    setIsDeletingFile(false);
+  };
+
+  // Direct delete used from modal (no confirmation)
+  const deleteFileDirect = async (file) => {
+    if (!file) return;
+    try {
+      const token = localStorage.getItem("token");
+      await axiosInstance.delete(`/task/${task.id}/files`, {
+        data: { fileIds: [file.id] },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (typeof onEdit === "function") onEdit();
+      // ensure modal selection resets if needed
+      setSelectedFileIndex(0);
+    } catch (e) {
+      console.error("Error deleting file:", e);
+    }
+  };
+
   const renderField = (columnKey, columnType, column, colIdx) => {
     const lowerKey = columnKey.toLowerCase();
-    const lowerType = columnType?.toLowerCase();
+    const lowerType = columnType?.toUpperCase();
 
     // Dynamic SELECT dropdown with add option modal
-    if (lowerType === "select" && column?.selects?.[0]?.options) {
+    if (lowerType === "SELECT" && column?.selects?.[0]?.options) {
       const selectId = column.selects[0]?.id;
       const options = column.selects[0].options;
       return (
@@ -494,16 +609,42 @@ const SheetTableItem = ({
       );
     }
 
-    // Date fields
-    if (["date1", "date2", "date3", "date4", "date5"].includes(lowerKey)) {
-      const dateValue = task[lowerKey] ? new Date(task[lowerKey]) : null;
+    // Date fields (including due date and duedate1-5)
+    if (
+      ["date1", "date2", "date3", "date4", "date5"].includes(lowerKey)
+    ) {
+      const dateValue = task[lowerKey] ? dayjs(task[lowerKey]) : null;
+      // const placeholder = isDueDateKey || lowerType === "DUEDATE" ? "Select due date" : "Select date";
       return (
-        <DatePicker
-          selected={dateValue}
+        <AntdDatePicker
+          value={dateValue}
           onChange={(date) => handleInputChange(lowerKey, date)}
-          dateFormat="yyyy-MM-dd"
-          className="w-[80%] bg-grayDash text-white text-[18px] rounded px-2 py-1"
-          placeholderText="Select date"
+          format="YYYY-MM-DD"
+          className="w-full bg-grayDash text-white text-[18px] rounded px-2 py-1"
+          placeholder={'enetr'}
+          allowClear
+        />
+      );
+    }
+
+    // Date/duedate range fields (array of [start, end])
+    if (["duedate1", "duedate2", "duedate3", "duedate4", "duedate5"].includes(lowerKey)) {
+      // Always expect/store as ["YYYY-MM-DD", "YYYY-MM-DD"]
+      const rangeValue = Array.isArray(task[lowerKey]) && task[lowerKey].length === 2
+        ? [
+            task[lowerKey][0] ? dayjs(task[lowerKey][0]) : null,
+            task[lowerKey][1] ? dayjs(task[lowerKey][1]) : null,
+          ]
+        : [null, null];
+      const placeholder = ["Start due date", "End due date"];
+      return (
+        <AntdRangePicker
+          value={rangeValue}
+          onChange={(dates) => handleInputChange(lowerKey, dates)}
+          format="YYYY-MM-DD"
+          className="w-full bg-grayDash text-white text-[18px] rounded px-2 py-1"
+          placeholder={placeholder}
+          allowClear
         />
       );
     }
@@ -647,9 +788,44 @@ const SheetTableItem = ({
       );
     }
 
+    // Generic mapped selects (status, etc.) — render similarly to priority
+    if (KEY_SELECT_OPTIONS[lowerKey]) {
+      const options = KEY_SELECT_OPTIONS[lowerKey];
+      return (
+        <Select
+          suffixIcon={null}
+          onChange={(value) =>
+            handleInputChange(lowerKey, { target: { value } })
+          }
+          defaultValue={task[lowerKey] || `Select ${lowerKey}`}
+          className="w-full"
+          style={{ width: "100%" }}
+        >
+          {options.map((opt) => (
+            <Select.Option key={opt.value} value={opt.value}>
+              <span
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  borderRadius: "6px",
+                  padding: "4px 10px",
+                  fontWeight: 500,
+                  color: "#fff",
+                  background: opt.bg || "#6B7280",
+                }}
+              >
+                {opt.label}
+              </span>
+            </Select.Option>
+          ))}
+        </Select>
+      );
+    }
+
     // Member avatars
     if (lowerKey === "members") {
       const taskMembers = Array.isArray(task.members) ? task.members : [];
+      const noCompanyMembers = !companyMembers || companyMembers.length === 0;
       return (
         <>
           <div
@@ -735,16 +911,22 @@ const SheetTableItem = ({
                     Invite
                   </button>
                   <div className="flex justify-end gap-2">
+                    {/* Disable Cancel and Save when no company members exist */}
                     <button
-                      className="px-4 py-2 rounded bg-gray3 text-white"
-                      onClick={() => setShowMemberModal(false)}
+                      className={`px-4 py-2 rounded bg-gray3 text-white transition ${
+                        noCompanyMembers ? "opacity-50 cursor-not-allowed" : "hover:bg-gray4"
+                      }`}
+                      onClick={() => { if (!noCompanyMembers) setShowMemberModal(false); }}
+                      disabled={noCompanyMembers}
                     >
                       Cancel
                     </button>
                     <button
-                      className="px-4 py-2 rounded bg-pink2 text-white font-semibold disabled:opacity-60"
+                      className={`px-4 py-2 rounded bg-pink2 text-white font-semibold transition ${
+                        (isSaving || noCompanyMembers) ? "opacity-50 cursor-not-allowed" : "hover:shadow"
+                      }`}
                       onClick={handleSaveMembers}
-                      disabled={isSaving}
+                      disabled={isSaving || noCompanyMembers}
                     >
                       {isSaving ? "Saving..." : "Save"}
                     </button>
@@ -770,6 +952,86 @@ const SheetTableItem = ({
         onChange={(e) => handleInputChange(lowerKey, e)}
         type="text"
       />
+    );
+  };
+
+  // Helper to render small file preview/icon
+  const renderFilesCell = () => {
+    const filesArr = Array.isArray(task.files) ? task.files : [];
+    if (!filesArr.length) {
+      return (
+        <div className="flex items-center gap-2 text-gray4">
+          <FaRegFileAlt className="w-4 h-4" />
+          <span className="text-xs">No files</span>
+        </div>
+      );
+    }
+
+    const isImageByPath = (p = "") => /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(p);
+
+    return (
+      <div className="flex items-center gap-2">
+        {filesArr.slice(0, 3).map((f, i) => {
+          const url = getFileUrl(f);
+          const filename = (f.path || "").split("/").pop() || f.id || "file";
+          const isImage = isImageByPath(f.path);
+          return (
+            // wrapper must allow overflow so the delete button can sit above the corner;
+            // add "group" so we can show X only on hover
+            <div key={f.id || i} className="relative rounded group" style={{ width: 36, height: 36, overflow: "visible" }}>
+              {/* thumbnail / click to open preview */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedFileIndex(i);
+                  setShowFileModal(true);
+                }}
+                title={filename}
+                className="w-full h-full p-0 block"
+                style={{ borderRadius: 6, overflow: "hidden", border: "1px solid #2A2D36", background: "#23272F" }}
+              >
+                {isImage ? (
+                  <img src={url} alt={filename} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-[#2A2D36] text-gray4">
+                    <FaRegFileAlt className="w-4 h-4" />
+                  </div>
+                )}
+              </button>
+
+              {/* small delete X on thumbnail (in-column) - shown only on hover (group-hover) */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  confirmDeleteFile(f); // preserve confirmation for column hover delete
+                }}
+                title="Delete file"
+                aria-label={`Delete ${filename}`}
+                className="absolute opacity-0 group-hover:opacity-100 transition-opacity"
+                style={{
+                  zIndex: 80,
+                  top: -6,
+                  right: -6,
+                  width: 14,
+                  height: 14,
+                  fontSize: 11,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: 9999,
+                  background: "#ffffff",
+                  color: "#000000",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.35)",
+                  cursor: "pointer",
+                }}
+              >
+                <span style={{ lineHeight: "12px" }}>✕</span>
+              </button>
+            </div>
+          );
+        })}
+        {filesArr.length > 3 && <div className="text-gray4 text-xs">+{filesArr.length - 3}</div>}
+      </div>
     );
   };
 
@@ -846,6 +1108,174 @@ const SheetTableItem = ({
                 </td>
               )
           )}
+
+          {/* Files default column (before Last update) */}
+          <td className="w-[140px] sm:w-[160px] md:w-[180px] flex items-center py-[16px] border-r border-r-[black] px-[11px] overflow-visible">
+            {renderFilesCell()}
+          </td>
+          
+          {/* New default column: Last update (avatar, name/email, timestamp) */}
+          <td className="w-[180px] flex items-center gap-3 py-[16px] border-r border-r-[black] px-[11px]">
+            {(() => {
+              const lastUser = task?.lastUpdatedByUser || null;
+              const avatarPath = lastUser?.avatar?.path
+                ? getFileUrl({ path: lastUser.avatar.path })
+                : testMemImg;
+              const displayName = lastUser
+                ? `${lastUser.firstName || ""} ${lastUser.lastName || ""}`.trim() || lastUser.email || "User"
+                : "—";
+              const time = task?.updatedAt || task?.updatedAt || task?.updatedAt;
+              const formatted = time ? dayjs(time).format("MMM D, HH:mm") : "";
+              return (
+                <div className="flex items-center w-full">
+                  <img
+                    src={avatarPath}
+                    alt={lastUser?.firstName || "User"}
+                    className="w-8 h-8 rounded-full object-cover border-2 border-[#23272F] flex-shrink-0"
+                  />
+                  <div className="flex-1 ml-3 min-w-0">
+                    <div className="text-white text-sm truncate">{displayName}</div>
+                    <div className="text-gray4 text-xs">{formatted}</div>
+                  </div>
+                </div>
+              );
+            })()}
+          </td>
+
+          {/* File preview modal (portal) - shows all files, allows select, download, delete */}
+          {showFileModal &&
+            typeof window !== "undefined" &&
+            document.getElementById("root") &&
+            ReactDOM.createPortal(
+              <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black bg-opacity-50 p-4">
+                <div className="bg-grayDash rounded-lg shadow-lg w-full max-w-[900px] overflow-hidden">
+                  <div className="flex justify-between items-center p-4 border-b border-[#2A2D36]">
+                    <div className="text-white font-semibold">Files</div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        className="text-gray4 p-2 rounded hover:bg-[#2A2D36]"
+                        onClick={() => setShowFileModal(false)}
+                      >
+                        <IoClose />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col md:flex-row gap-4 p-4">
+                    {/* Preview pane */}
+                    <div className="flex-shrink-0 w-full md:w-2/3 flex items-center justify-center bg-[#23272F] border border-[#2A2D36] rounded p-3 overflow-auto">
+                      {Array.isArray(task.files) && task.files.length > 0 ? (
+                        (() => {
+                          const f = task.files[selectedFileIndex] || task.files[0];
+                          const isImage = /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(f.path || "");
+                          return isImage ? (
+                            <img
+                              src={getFileUrl(f)}
+                              alt={f.path?.split?.("/").pop?.() || "preview"}
+                              className="max-h-[70vh] max-w-full object-contain"
+                            />
+                          ) : (
+                            <div className="flex flex-col items-center text-gray4">
+                              <FaRegFileAlt className="w-20 h-20 mb-2" />
+                              <div className="text-sm">{f.path?.split?.("/").pop?.() || f.id}</div>
+                            </div>
+                          );
+                        })()
+                      ) : (
+                        <div className="flex flex-col items-center text-gray4">
+                          <FaRegFileAlt className="w-12 h-12 mb-2" />
+                          <div className="text-sm">No files</div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Files list / actions */}
+                    <div className="flex-1 flex flex-col gap-3">
+                      <div className="flex-1 overflow-y-auto max-h-[60vh] p-1">
+                        <div className="grid grid-cols-3 gap-2">
+                          {Array.isArray(task.files) && task.files.length > 0 ? (
+                            task.files.map((f, idx) => {
+                              const url = getFileUrl(f);
+                              const filename = f.path?.split?.("/").pop?.() || f.id;
+                              const isImage = /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(f.path || "");
+                              return (
+                                // make the thumbnail a group so delete button appears on hover
+                                <div key={f.id || idx} className="relative group">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedFileIndex(idx);
+                                    }}
+                                    className={`w-full h-24 rounded border overflow-hidden bg-[#23272F] flex items-center justify-center transition ${selectedFileIndex === idx ? "border-pink2 ring-2 ring-pink2" : "border-[#2A2D36]"}`}
+                                  >
+                                    {isImage ? (
+                                      <img src={url} alt={filename} className="w-full h-full object-cover" />
+                                    ) : (
+                                      <div className="flex flex-col items-center text-gray4">
+                                        <FaRegFileAlt className="w-6 h-6" />
+                                        <div className="text-xs mt-1 truncate">{filename}</div>
+                                      </div>
+                                    )}
+                                  </button>
+
+                                  {/* small circular delete X (hidden until hover) */}
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      deleteFileDirect(f); // direct delete from modal
+                                    }}
+                                    title="Delete file"
+                                    aria-label={`Delete ${filename}`}
+                                    className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white text-black flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity duration-150 shadow"
+                                    style={{ zIndex: 60 }}
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              );
+                            })
+                          ) : (
+                            <div className="col-span-3 text-gray4 text-sm">No files</div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        {Array.isArray(task.files) && task.files[selectedFileIndex] && (
+                          <>
+                            <button
+                              onClick={() => downloadFile(task.files[selectedFileIndex])}
+                              className="px-4 py-2 rounded bg-pink2 text-white font-semibold"
+                            >
+                              Download
+                            </button>
+                            <button
+                              onClick={() => setShowFileModal(false)}
+                              className="px-4 py-2 rounded bg-gray3 text-white"
+                            >
+                              Close
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>,
+              document.getElementById("root")
+            )}
+
+          {/* Delete confirmation modal for file deletion */}
+          <DeleteConfirmationModal
+            isOpen={showDeleteConfirm}
+            onClose={() => {
+              setShowDeleteConfirm(false);
+              setFileToDelete(null);
+            }}
+            onDelete={handleDeleteFile}
+            title="Delete file"
+            message="Are you sure you want to delete this file? This action cannot be undone."
+          />
         </tr>
       )}
     </Draggable>
@@ -855,3 +1285,4 @@ const SheetTableItem = ({
 
 
 export default SheetTableItem;
+

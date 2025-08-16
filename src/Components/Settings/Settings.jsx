@@ -526,7 +526,6 @@ const Settings = ({ onClose }) => {
               </div>
             </div>
             <div className="flex items-center mb-4">
-              <label className="text-[#C4E1FE] font-medium mr-3">Blocked</label>
               <input
                 type="checkbox"
                 name="isBlocked"
