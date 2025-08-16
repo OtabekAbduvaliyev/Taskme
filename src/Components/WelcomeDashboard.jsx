@@ -13,7 +13,7 @@ const WelcomeDashboard = () => {
     const fetchUsage = async () => {
       try {
         const token = localStorage.getItem('token');
-        const res = await fetch('https://eventify.preview.uz/api/v1/company/usage', {
+        const res = await fetch('http://localhost:4000/api/v1/company/usage', {
           headers: { Authorization: `Bearer ${token}` }
         });
         const data = await res.json();
@@ -97,13 +97,17 @@ const WelcomeDashboard = () => {
     },
     {
       title: "Workspace Usage",
-      value: `${usage.usageInPercent.workspace}% used`,
+      value: usage.usageInPercent && typeof usage.usageInPercent.workspace !== "undefined"
+        ? `${usage.usageInPercent.workspace}% used`
+        : "N/A",
       icon: <MdTrendingUp className="text-3xl" />,
       color: "text-pink2"
     },
     {
       title: "Member Usage",
-      value: `${usage.usageInPercent.member}% used`,
+      value: usage.usageInPercent && typeof usage.usageInPercent.member !== "undefined"
+        ? `${usage.usageInPercent.member}% used`
+        : "N/A",
       icon: <AiOutlineTeam className="text-3xl" />,
       color: "text-[#B296F5]"
     }

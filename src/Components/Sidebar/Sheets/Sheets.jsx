@@ -70,7 +70,12 @@ const Sheets = () => {
     enabled: !!id,
   });
 
-  // Do not auto-navigate to the first sheet; only navigate on explicit actions (e.g., after creation)
+  useEffect(() => {
+    if (sheets?.sheets.length && !sheetId) {
+      // Navigate to the first sheet if sheetId is not provided
+      navigate(`/dashboard/workspace/${id}/${sheets.sheets[0].id}`);
+    }
+  }, [sheets, sheetId, id, navigate]);
 
   const handleToggleModal = useCallback(async () => {
     setIsOpen((prev) => !prev);

@@ -108,6 +108,7 @@ console.log(currentPlan);
           message: "Workspace updated successfully!",
         });
       } else {
+        // Create new workspace
         const newWorkspace = await createWorkspace(workspaceName);
         if (newWorkspace && newWorkspace.id) {
           setToast({
@@ -115,7 +116,23 @@ console.log(currentPlan);
             type: "success",
             message: "Workspace created successfully!",
           });
-          navigate(`/dashboard/workspace/${newWorkspace.id}`);
+
+          // Place new workspace at the top (order 1), increment others
+          if (workspacesData && workspacesData.length > 0) {
+            const updatedWorkspaces = [
+              { ...newWorkspace, order: 1 },
+              ...workspacesData.map(w => ({ ...w, order: (w.order || 0) + 1 }))
+            ];
+            // Sort by order ascending for DND compatibility
+            updatedWorkspaces.sort((a, b) => (a.order || 0) - (b.order || 0));
+            const workspaceIds = updatedWorkspaces.map(w => w.id);
+            const orders = updatedWorkspaces.map(w => w.order);
+            await axiosInstance.put("/workspace", { workspaceIds, orders }, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+          }
+          // Always activate the newly created workspace
+          navigate(`/dashboard/workspace/${newWorkspace.id}`, { replace: true });
         }
       }
       setWorkspaceName({ name: "" });
@@ -139,6 +156,7 @@ console.log(currentPlan);
     navigate,
     token,
     editingWorkspaceOrder,
+    workspacesData,
   ]);
 
   // 3. Workspace deletion: after deleting, refetch and redirect if needed
@@ -155,7 +173,21 @@ console.log(currentPlan);
         type: "success",
         message: "Workspace deleted successfully!",
       });
-      // After refetch, the useEffect above will handle redirection if needed
+
+      // After deletion, activate the first workspace if any remain
+      if (workspacesData && workspacesData.length > 1) {
+        // Filter out the deleted workspace and sort by order descending
+        const remaining = [...workspacesData]
+          .filter(w => w.id !== workspaceId)
+          .sort((a, b) => (b.order || 0) - (a.order || 0));
+        if (remaining.length > 0) {
+          navigate(`/dashboard/workspace/${remaining[0].id}`, { replace: true });
+        } else {
+          navigate("/dashboard", { replace: true });
+        }
+      } else {
+        navigate("/dashboard", { replace: true });
+      }
     } catch (error) {
       setToast({
         isOpen: true,
@@ -241,10 +273,15 @@ console.log(currentPlan);
     },
   ];
 
-  const visibleWorkspaces = workspacesData
+  // Sort workspaces by order ascending (lowest order first)
+  const sortedWorkspaces = workspacesData
+    ? [...workspacesData].sort((a, b) => (a.order || 0) - (b.order || 0))
+    : [];
+
+  const visibleWorkspaces = sortedWorkspaces
     ? showAll
-      ? workspacesData
-      : workspacesData.slice(0, 3)
+      ? sortedWorkspaces
+      : sortedWorkspaces.slice(0, 3)
     : [];
 
    useEffect(() => {

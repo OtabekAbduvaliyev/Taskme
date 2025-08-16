@@ -12,6 +12,8 @@ const initialForm = {
   maxMembers: 0,
   maxViewers: 0,
   maxTasks: 0,
+  isCustomized: false,
+  customizedPlanFor: [],
 };
 
 const AdminPlans = () => {
@@ -31,7 +33,10 @@ const AdminPlans = () => {
   const fetchPlans = async () => {
     setLoading(true);
     try {
-      const res = await axiosInstance.get('/plan');
+      const token = localStorage.getItem('token');
+      const res = await axiosInstance.get('/plan', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       // Ensure each plan has an id property for consistency
       const plansWithId = (res.data || []).map(plan => ({
         ...plan,
@@ -50,13 +55,22 @@ const AdminPlans = () => {
 
   // Handle form input change
   const handleChange = e => {
-    const { name, value } = e.target;
-    setForm(f => ({
-      ...f,
-      [name]: name === 'price' || name.startsWith('max')
-        ? Number(value)
-        : value
-    }));
+    const { name, value, type, checked } = e.target;
+    setForm(f => {
+      if (name === "isCustomized") {
+        return { ...f, isCustomized: checked };
+      }
+      if (name === "customizedPlanFor") {
+        // Split by comma and trim
+        return { ...f, customizedPlanFor: value.split(",").map(v => v.trim()).filter(Boolean) };
+      }
+      return {
+        ...f,
+        [name]: name === 'price' || name.startsWith('max')
+          ? Number(value)
+          : value
+      };
+    });
   };
 
   // Handle form submit (create or update)
@@ -64,14 +78,21 @@ const AdminPlans = () => {
     e.preventDefault();
     setFormLoading(true);
     const token = localStorage.getItem('token');
+    const payload = {
+      ...form,
+      customizedPlanFor: Array.isArray(form.customizedPlanFor)
+        ? form.customizedPlanFor
+        : [],
+      isCustomized: !!form.isCustomized,
+    };
     try {
       if (editId) {
-        await axiosInstance.put(`/plan/${editId}`, form, {
+        await axiosInstance.put(`/plan/${editId}`, payload, {
           headers: { Authorization: `Bearer ${token}` }
         });
         setToast({ isOpen: true, type: 'success', message: 'Plan updated successfully.' });
       } else {
-        await axiosInstance.post('/plan', form, {
+        await axiosInstance.post('/plan', payload, {
           headers: { Authorization: `Bearer ${token}` }
         });
         setToast({ isOpen: true, type: 'success', message: 'Plan created successfully.' });
@@ -97,6 +118,8 @@ const AdminPlans = () => {
       maxMembers: plan.maxMembers,
       maxViewers: plan.maxViewers,
       maxTasks: plan.maxTasks,
+      isCustomized: !!plan.isCustomized,
+      customizedPlanFor: Array.isArray(plan.customizedPlanFor) ? plan.customizedPlanFor : [],
     });
   };
 
@@ -288,6 +311,30 @@ const AdminPlans = () => {
                 />
               </div>
             </div>
+            <div>
+              <label className="block text-white2 mb-1">Is Customized</label>
+              <input
+                type="checkbox"
+                name="isCustomized"
+                checked={form.isCustomized}
+                onChange={handleChange}
+                className="mr-2"
+                disabled={formLoading}
+              />
+              <span className="text-white2">Check if this is a customized plan</span>
+            </div>
+            <div>
+              <label className="block text-white2 mb-1">Customized Plan For (comma separated)</label>
+              <input
+                type="text"
+                name="customizedPlanFor"
+                value={form.customizedPlanFor.join(", ")}
+                onChange={handleChange}
+                className="w-full rounded px-3 py-2 bg-gray3 text-white"
+                disabled={formLoading}
+                placeholder="companyId1, companyId2, ..."
+              />
+            </div>
             <div className="flex gap-2">
               <button
                 type="submit"
@@ -321,14 +368,19 @@ const AdminPlans = () => {
         message={toast.message}
         onClose={() => setToast(t => ({ ...t, isOpen: false }))}
       />
-      {/* Delete Confirmation Modal */}
-      <DeleteConfirmationModal
-        isOpen={deleteModal.isOpen}
-        onClose={() => setDeleteModal({ isOpen: false, planId: null })}
-        onDelete={confirmDelete}
-        title="Delete Plan"
-        message="Are you sure you want to delete this plan? This action cannot be undone."
-      />
+
+
+
+
+
+
+
+
+
+
+
+
+
     </div>
   );
 };

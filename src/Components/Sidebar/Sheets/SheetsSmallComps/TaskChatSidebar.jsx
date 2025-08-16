@@ -9,6 +9,7 @@ import { io } from "socket.io-client";
 import dayjs from "dayjs";
 import InviteMemberModal from "../../../Modals/InviteMemberModal";
 import { FaRegComments, FaRegFolderOpen } from "react-icons/fa";
+import { MdOutlineHistory } from "react-icons/md"; // Add icon for activity log
 
 const sidebarVariants = {
     hidden: { x: "100%" },
@@ -28,12 +29,14 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
     const [messageInput, setMessageInput] = useState("");
     const [userId, setUserId] = useState(null);
     const [showInviteModal, setShowInviteModal] = useState(false);
-    const [activeTab, setActiveTab] = useState("chat"); // "chat" or "files"
+    const [activeTab, setActiveTab] = useState("chat"); // "chat", "files", "activity"
     const messagesEndRef = useRef(null); // Add ref for auto-scroll
     const chatContainerRef = useRef(null); // Ref for chat container
     const [showScrollButton, setShowScrollButton] = useState(false);
     // Placeholder for files (replace with real logic as needed)
     const [files, setFiles] = useState([]); // [{id, name, url, uploadedAt, uploadedBy}]
+    const [activityLogs, setActivityLogs] = useState([]);
+    const [isLoadingLogs, setIsLoadingLogs] = useState(false);
 
     // Keep members in sync with task prop
     useEffect(() => {
@@ -151,6 +154,21 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
         }
     };
 
+    // Fetch activity logs when tab is switched to "activity"
+    useEffect(() => {
+        if (activeTab === "activity" && task?.id) {
+            setIsLoadingLogs(true);
+            const token = localStorage.getItem("token");
+            axiosInstance
+                .get(`/log/task/${task.id}`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                })
+                .then(res => setActivityLogs(res.data || []))
+                .catch(() => setActivityLogs([]))
+                .finally(() => setIsLoadingLogs(false));
+        }
+    }, [activeTab, task?.id]);
+
     return (
         <AnimatePresence>
             {isOpen && (
@@ -227,6 +245,16 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                             onClick={() => setActiveTab("files")}
                         >
                             <FaRegFolderOpen /> Files
+                        </button>
+                        <button
+                            className={`flex-1 flex items-center justify-center gap-2 py-2 font-semibold text-sm transition ${
+                                activeTab === "activity"
+                                    ? "text-pink2 border-b-2 border-pink2"
+                                    : "text-gray4"
+                            }`}
+                            onClick={() => setActiveTab("activity")}
+                        >
+                            <MdOutlineHistory /> Activity Log
                         </button>
                     </div>
                     {/* Tab Content */}
@@ -488,6 +516,38 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                                 />
                                 <span className="text-xs text-gray4 mt-1 block">File upload coming soon.</span>
                             </div>
+                        </div>
+                    )}
+                    {activeTab === "activity" && (
+                        <div className="flex-1 flex flex-col px-4 py-4 bg-[#23272F] custom-scrollbar">
+                            <div className="font-bold text-lg text-white mb-4">Activity Log</div>
+                            {isLoadingLogs ? (
+                                <div className="text-gray4 text-center mt-10">Loading...</div>
+                            ) : (
+                                <>
+                                    {(!activityLogs || activityLogs.length === 0) ? (
+                                        <div className="text-gray4 text-center mt-10">
+                                            <p>No activity logs found for this task.</p>
+                                        </div>
+                                    ) : (
+                                        <ul className="flex flex-col gap-3">
+                                            {activityLogs.map((log, idx) => (
+                                                <li key={log.id || idx} className="bg-[#2A2D36] rounded-lg px-3 py-2 flex flex-col">
+                                                    <span className="text-white text-sm font-semibold">
+                                                        {log.user?.firstName || "User"} {log.user?.lastName || ""}
+                                                    </span>
+                                                    <span className="text-gray4 text-xs">
+                                                        {dayjs(log.createdAt).format("MMM D, HH:mm")}
+                                                    </span>
+                                                    <span className="text-white text-[15px] mt-1 break-words">
+                                                        {log.action || log.description || ""}
+                                                    </span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </>
+                            )}
                         </div>
                     )}
                 </motion.div>

@@ -98,6 +98,7 @@ const CreateSheetFormModal = ({
     columns: columns,
   });
   const { createSheet } = useContext(AuthContext);
+  const [loading, setLoading] = useState(false); // Add loading state
 
   const handleAddColumn = () => {
     setColumns([
@@ -130,6 +131,7 @@ const CreateSheetFormModal = ({
   };
 
   const handleSubmit = async () => {
+    setLoading(true); // Start loading
     // Validate workspaceId
     if (!sheet.workspaceId) {
       swal({
@@ -138,6 +140,7 @@ const CreateSheetFormModal = ({
         icon: "error",
         button: "close",
       });
+      setLoading(false); // End loading
       return;
     }
     const updatedSheet = {
@@ -175,6 +178,7 @@ const CreateSheetFormModal = ({
     if (onSheetCreated && newSheet) {
       onSheetCreated(newSheet);
     }
+    setLoading(false); // End loading
     handleToggleModal();
   };
 
@@ -542,9 +546,11 @@ const CreateSheetFormModal = ({
                     whileTap={{ scale: 0.98 }}
                     onClick={isEditing ? handleEditSheet : handleSubmit}
                     className="flex-1 bg-gradient-to-r from-pink2 to-pink2/90 text-white rounded-xl py-3.5 font-medium transition-all duration-300 hover:shadow-lg hover:shadow-pink2/20 relative overflow-hidden group"
+                    disabled={loading} // Disable while loading
+                    style={loading ? { opacity: 0.6, cursor: "not-allowed" } : {}}
                   >
                     <span className="relative z-10">
-                      {isEditing ? "Save Changes" : "Create Sheet"}
+                      {loading ? "Creating..." : (isEditing ? "Save Changes" : "Create Sheet")}
                     </span>
                     <div className="absolute inset-0 bg-gradient-to-r from-pink2/0 via-white/20 to-pink2/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
                   </motion.button>
