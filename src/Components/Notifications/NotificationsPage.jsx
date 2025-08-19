@@ -144,7 +144,7 @@ const NotificationsPage = () => {
   };
 
   const renderNotificationActions = (notification) => {
-    if (notification.member.status === "NEW" && !notification.actionTaken) {
+    if (notification.member?.status === "NEW" && !notification.actionTaken) {
       return (
         <div className="flex gap-2 mt-2">
           <button
@@ -159,7 +159,7 @@ const NotificationsPage = () => {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              handleInvitation(notification, "DECLINED");
+              handleInvitation(notification, "REJECTED");
             }}
             className="px-3 py-1.5 bg-[#2A2A2A] hover:bg-[#3A3A3A] text-[#777C9D] text-sm rounded-lg transition-colors"
           >
@@ -218,7 +218,7 @@ const NotificationsPage = () => {
           </div>
 
           {/* Notifications List */}
-          <div className="divide-y divide-[#3A3A3A]">
+          <div className="divide-y divide-[#3A3A3A] ">
             {loading ? (
               <div className="p-8 text-center text-[#777C9D]">
                 Loading notifications...

@@ -156,12 +156,9 @@ const WelcomeDashboard = () => {
     <motion.div 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="p-4 font-radioCanada bg-background min-h-screen"
+      className="p-4 font-radioCanada bg-background min-h-screen "
     >
-      {/* Breadcrumb fallback */}
-      {(!usage || usage?.workspaces === 0) && (
-        <div className="text-pink2 text-sm font-medium mb-2">Dashboard</div>
-      )}
+
       {/* Welcome Section with Gradient */}
       <motion.div 
         initial={{ opacity: 0, y: -20 }}
@@ -170,7 +167,7 @@ const WelcomeDashboard = () => {
         className="mb-8 bg-gradient-to-r from-white/[0.07] to-white/[0.02] p-4 rounded-xl relative overflow-hidden
           shadow-[0_0_10px_rgba(255,255,255,0.03)] hover:shadow-[0_0_15px_rgba(255,255,255,0.05)] transition-shadow duration-500"
       >
-        <div className="relative z-10">
+        <div className="">
           <h1 className="text-2xl font-semibold text-white mb-1">Welcome back, Team! <span className="text-pink2">👋</span></h1>
           <p className="text-white/70 text-base">Here's your events overview for today.</p>
         </div>
@@ -217,11 +214,11 @@ const WelcomeDashboard = () => {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.3 }}
-        className="bg-white bg-opacity-[0.03] rounded-xl p-4
+        className="bg-white bg-opacity-[0.03] rounded-xl p-4  
           shadow-[0_0_10px_rgba(255,255,255,0.02)] hover:shadow-[0_0_15px_rgba(255,255,255,0.03)]
           backdrop-blur-[2px] transition-all duration-500 border border-[#2A2A2A]"
       >
-        <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+        <h2 className="text-lg font-semibold text-white  flex items-center gap-2">
           <AiOutlineStar className="text-pink2" />
           Highlights
         </h2>
@@ -229,10 +226,14 @@ const WelcomeDashboard = () => {
           variants={container}
           initial="hidden"
           animate="show"
-          className="grid grid-cols-1 md:grid-cols-3 gap-3"
+          // Added vertical padding so top and bottom spacing inside the scroll area match
+          className="grid grid-cols-1 gap-3 max-h-[260px] overflow-y-auto pr-2 pt-3 pb-8 xl:py-3 md:grid-cols-3 md:max-h-none md:overflow-visible custom-scrollbar"
+          role="region"
+          aria-label="Highlights"
         >
           {loading ? (
             Array(3).fill(0).map((_, idx) => (
+              // ensure skeletons don't touch the bottom by using consistent height + internal padding
               <div key={idx} className="rounded-lg p-3 bg-white/[0.02] animate-pulse h-20" />
             ))
           ) : (

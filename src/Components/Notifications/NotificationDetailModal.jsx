@@ -103,10 +103,14 @@ const NotificationDetailModal = ({ notificationId, isOpen, onClose }) => {
 
   if (!isOpen) return null;
 
-  return ReactDOM.createPortal( 
-       <AnimatePresence>
+  // render into main app root to avoid z-index stacking issues with other containers
+  const portalTarget =
+    (typeof document !== "undefined" && document.getElementById("root")) ||
+    (typeof document !== "undefined" && document.body);
+  return ReactDOM.createPortal(
+    <AnimatePresence>
       <motion.div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
+        className="fixed inset-0 z-[10000] flex items-center justify-center bg-black bg-opacity-70 backdrop-blur-sm"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -261,7 +265,7 @@ const NotificationDetailModal = ({ notificationId, isOpen, onClose }) => {
                       {actionLoading ? "Processing..." : "Accept"}
                     </button>
                     <button
-                      onClick={() => handleInvitation("DECLINED")}
+                      onClick={() => handleInvitation("REJECTED")}
                       disabled={actionLoading}
                       className="px-3 py-1.5 bg-[#2A2A2A] hover:bg-[#3A3A3A] text-[#777C9D] text-sm rounded-lg transition-colors disabled:opacity-60"
                     >
@@ -279,7 +283,7 @@ const NotificationDetailModal = ({ notificationId, isOpen, onClose }) => {
         </motion.div>
       </motion.div>
     </AnimatePresence>,
-    document.getElementById("modal-root") // 👈 goes outside main layout
+    portalTarget
   );
 };
 

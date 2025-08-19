@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useState } from "react";
+import React, { useCallback, useContext, useState, useEffect } from "react";
 import ReactDOM from "react-dom";
 import { AuthContext } from "../../../Auth/AuthContext";
 import { useParams } from "react-router-dom";
@@ -41,14 +41,12 @@ const CreateSheetFormModal = ({
       type: ColumnType.TEXT,
       show: true,
       isDefault: true,
-      sheetId: sheetId,
     },
     {
       name: "Status",
       type: ColumnType.SELECT,
       show: true,
       isDefault: true,
-      sheetId: sheetId,
       selects: [
         {
           title: "Select the status",
@@ -62,35 +60,30 @@ const CreateSheetFormModal = ({
       type: ColumnType.SELECT,
       show: true,
       isDefault: true,
-      sheetId: sheetId,
     },
     {
-      name: "Link",
+      name: "Links",
       type: ColumnType.TEXT,
       show: true,
       isDefault: true,
-      sheetId: sheetId,
     },
     {
       name: "Price",
       type: ColumnType.NUMBER,
       show: true,
-      isDefault: true,
-      sheetId: sheetId,
+      isDefault: true
     },
     {
       name: "Members",
-      type: ColumnType.MEMEBERS,
+      type: ColumnType.MEMBERS,
       show: true,
       isDefault: true,
-      sheetId: sheetId,
     },
     {
       name: "Order",
       type: ColumnType.CHECK,
       show: false,
       isDefault: true,
-      sheetId: sheetId,
     },
   ]);
   const [sheet, setSheet] = useState({
@@ -100,6 +93,26 @@ const CreateSheetFormModal = ({
   });
   const { createSheet } = useContext(AuthContext);
   const [loading, setLoading] = useState(false); // Add loading state
+
+  // Add useEffect to keep sheet.name in sync when editing
+  useEffect(() => {
+    // When modal opens in edit mode (or when editingSheetName changes), sync the name into local state
+    if (isOpen && isEditing) {
+      setSheet(prev => ({
+        ...prev,
+        name: editingSheetName || "",
+        workspaceId: id,
+      }));
+    }
+    // When modal opens for create mode ensure name is empty and workspaceId is set
+    if (isOpen && !isEditing) {
+      setSheet(prev => ({
+        ...prev,
+        name: "",
+        workspaceId: id,
+      }));
+    }
+  }, [isOpen, isEditing, editingSheetName, id]);
 
   const handleAddColumn = () => {
     setColumns([

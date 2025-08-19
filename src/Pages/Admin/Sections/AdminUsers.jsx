@@ -297,18 +297,20 @@ const AdminUsers = () => {
   return (
     <div className="w-full">
       <h2 className="text-2xl font-radioCanada text-white mb-8">Admin Users</h2>
+
+      {/* Responsive filter: grid so controls wrap on small screens */}
       <form
         onSubmit={handleSearch}
-        className="flex flex-wrap gap-4 mb-6 items-center bg-grayDash rounded-xl px-6 py-4"
+        className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-6 items-center bg-grayDash rounded-xl px-4 py-4"
       >
-        <div className="flex items-center gap-2 bg-gray3 rounded-lg px-3 py-2">
+        <div className="flex items-center gap-2 bg-gray3 rounded-lg px-3 py-2 col-span-1 sm:col-span-2 md:col-span-1">
           <MdSearch className="text-white2" />
           <input
             type="text"
             placeholder="Search"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="bg-transparent outline-none text-white2 placeholder:text-white2"
+            className="bg-transparent outline-none text-white2 placeholder:text-white2 w-full"
           />
         </div>
         <select value={status} onChange={e => setStatus(e.target.value)} className="bg-gray3 text-white2 rounded-lg px-3 py-2">
@@ -331,21 +333,52 @@ const AdminUsers = () => {
         <input type="text" placeholder="Last Name" value={lastName} onChange={e => setLastName(e.target.value)} className="bg-gray3 text-white2 rounded-lg px-3 py-2" />
         <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="bg-gray3 text-white2 rounded-lg px-3 py-2" />
         <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="bg-gray3 text-white2 rounded-lg px-3 py-2" />
-        <button type="submit" className="bg-pink2 text-white rounded-lg px-6 py-2 font-radioCanada hover:bg-pink transition-colors">
-          Filter
-        </button>
+
+        {/* Filter button spans full width on small screens */}
+        <div className="col-span-1 sm:col-span-2 md:col-span-1">
+          <button type="submit" className="w-full bg-pink2 text-white rounded-lg px-6 py-2 font-radioCanada hover:bg-pink transition-colors">
+            Filter
+          </button>
+        </div>
       </form>
+
       <div className="mb-4">
         <label className="text-white2 mr-2">Items per page:</label>
         <select value={limit} onChange={e => { setLimit(Number(e.target.value)); setPage(1); }} className="bg-gray3 text-white2 rounded-lg px-3 py-2">
           {[10, 20, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
         </select>
       </div>
+
       {loading && <div className="text-white2">Loading...</div>}
       {error && <div className="text-red-400">{error}</div>}
       {!loading && !users.length && <div className="text-white2">No users found.</div>}
+
+      {/* Mobile list view: visible on small screens, hidden on md+ */}
+      {!loading && users.length > 0 && (
+        <div className="space-y-4 md:hidden">
+          {users.map(user => (
+            <div key={user.id || user._id} className="bg-grayDash rounded-xl p-4 flex items-start justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <MdPerson className="text-pink2" />
+                  <div className="text-white font-semibold">{user.firstName} {user.lastName}</div>
+                </div>
+                <div className="text-white2 text-sm mt-2">{user.email}</div>
+                <div className="text-white2 text-xs mt-1">Role: {user.isAdmin ? 'Admin' : 'User'}</div>
+              </div>
+              <div className="flex flex-col items-end gap-2">
+                <button onClick={() => handleViewUser(user.id || user._id)} className="bg-gray3 text-white2 rounded-md px-3 py-1 text-sm">View</button>
+                <button onClick={() => handleEditUserClick(user)} className="bg-gray3 text-white2 rounded-md px-3 py-1 text-sm">Edit</button>
+                <button onClick={() => handleDeleteUserClick(user.id || user._id)} className="bg-selectRed1 text-white rounded-md px-3 py-1 text-sm">Delete</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Desktop table view: hidden on small screens (md+) */}
       {!loading && !!users.length && (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto hidden md:block">
           <table className="w-full bg-grayDash rounded-xl">
             <thead>
               <tr className="bg-gray3 text-white2">

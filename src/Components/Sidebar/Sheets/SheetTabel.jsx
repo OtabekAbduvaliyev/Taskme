@@ -47,6 +47,8 @@ const SheetTabel = ({
   const [columnOrder, setColumnOrder] = useState([]);
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [lastSentTask, setLastSentTask] = useState(null);
+  // track retries per task to avoid infinite retry loops on server errors
+  const retryCountsRef = useRef({});
   const [columnContextMenu, setColumnContextMenu] = useState({
     visible: false,
     x: 0,
@@ -218,48 +220,65 @@ const SheetTabel = ({
 
   // Handle task changes
   const handleColumnChange = (taskId, taskKey, value) => {
-    if (taskId === editingTaskId) {
-      setFilteredTasks((prevTasks) =>
-        prevTasks.map((task) =>
-          task.id === taskId ? { ...task, [taskKey]: value } : task
-        )
-      );
-    }
+    // Always update local UI immediately so typing/partial values are preserved.
+    setFilteredTasks((prevTasks) =>
+      prevTasks.map((task) =>
+        task.id === taskId ? { ...task, [taskKey]: value } : task
+      )
+    );
+    // Ensure autosave effect targets this task
+    setEditingTaskId(taskId);
   };
 
+  // Debounced autosave with retry limit to avoid infinite retry loop on errors
   useEffect(() => {
     if (!editingTaskId) return;
 
-    const intervalId = setInterval(() => {
-      const editedTask = filteredTasks.find(
-        (task) => task.id === editingTaskId
-      );
-      if (editedTask) {
-        // Only send if data has changed since last sent
-        const memberfixedtask = {
-          ...editedTask,
-          members: editedTask.members.map((member) => member.id),
-        };
-        const currentTaskString = JSON.stringify(memberfixedtask);
-        if (currentTaskString !== lastSentTask) {
-          axiosInstance
-            .patch(`/task/${editingTaskId}`, memberfixedtask, {
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
-            })
-            .then((response) => {
-              setLastSentTask(currentTaskString);
-              console.log("Task updated successfully:", response.data);
-            })
-            .catch((error) => {
-              console.error("Error updating task:", error);
-            });
+    // debounce delay (ms)
+    const DELAY = 800;
+    // max attempts before giving up (treat as attempted to avoid infinite loop)
+    const MAX_RETRIES = 5;
+
+    let mounted = true;
+    const handler = setTimeout(async () => {
+      if (!mounted) return;
+      const editedTask = filteredTasks.find((task) => task.id === editingTaskId);
+      if (!editedTask) return;
+
+      const memberfixedtask = {
+        ...editedTask,
+        members: Array.isArray(editedTask.members)
+          ? editedTask.members.map((member) => member.id)
+          : [],
+      };
+      const currentTaskString = JSON.stringify(memberfixedtask);
+      if (currentTaskString === lastSentTask) return; // nothing new to send
+
+      try {
+        await axiosInstance.patch(`/task/${editingTaskId}`, memberfixedtask, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        // success -> mark as sent and reset retry count
+        setLastSentTask(currentTaskString);
+        retryCountsRef.current[editingTaskId] = 0;
+      } catch (err) {
+        console.error("Error updating task:", err);
+        // increment retry count
+        const prev = retryCountsRef.current[editingTaskId] || 0;
+        retryCountsRef.current[editingTaskId] = prev + 1;
+        // if reached max retries, mark as "attempted" to avoid continuous loop
+        if (retryCountsRef.current[editingTaskId] >= MAX_RETRIES) {
+          // avoid infinite retries: treat as last-sent to stop further attempts
+          setLastSentTask(currentTaskString);
+          // optionally: notify user or set an error flag here
         }
       }
-    }, 300);
+    }, DELAY);
 
-    return () => clearInterval(intervalId);
+    return () => {
+      mounted = false;
+      clearTimeout(handler);
+    };
   }, [editingTaskId, filteredTasks, token, lastSentTask]);
 
   // Modal logic for adding a new column

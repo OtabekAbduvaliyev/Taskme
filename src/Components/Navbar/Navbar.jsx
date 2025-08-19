@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useContext } from "react";
+import ReactDOM from "react-dom";
 import { HiOutlineBell } from "react-icons/hi2";
 import { IoPersonAddOutline } from "react-icons/io5";
 import { IoMdMore } from "react-icons/io";
@@ -32,11 +33,24 @@ const Navbar = ({ onToggleSidebar, sidebarOpen }) => {
   const [previousCount, setPreviousCount] = useState(0);
   const audioRef = useRef(new Audio(notificationSound));
   const notificationRef = useRef(null);
+  const portalRef = useRef(null);
+  const profileRef = useRef(null);
+  const profilePortalRef = useRef(null);
+   // use left instead of right to anchor under the bell reliably on narrow screens
+  const [dropdownStyle, setDropdownStyle] = useState({ top: 0, left: 16, width: 380 });
+  const [profileDropdownStyle, setProfileDropdownStyle] = useState({ top: 0, left: 16, width: 300 });
+  const [companyColors, setCompanyColors] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("companyColors")) || {};
+    } catch {
+      return {};
+    }
+  });
+  const colorPalette = ["#FF5A8A", "#B296F5", "#0EC359", "#DC5091"];
   const [selectedNotificationId, setSelectedNotificationId] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedRole, setSelectedRole] = useState(null);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
-  const profileDropdownRef = useRef(null); // Add this ref
   const { changeCompany } = useContext(AuthContext);
   const fetchNotifications = async () => {
     try {
@@ -68,11 +82,18 @@ const Navbar = ({ onToggleSidebar, sidebarOpen }) => {
 
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (
-        notificationRef.current &&
-        !notificationRef.current.contains(event.target)
-      ) {
+      const target = event.target;
+      const clickedInBell = notificationRef.current && notificationRef.current.contains(target);
+      const clickedInPortal = portalRef.current && portalRef.current.contains(target);
+      const clickedInProfile = profileRef.current && profileRef.current.contains(target);
+      const clickedInProfilePortal = profilePortalRef.current && profilePortalRef.current.contains(target);
+      // close notifications if click outside bell/portal
+      if (!clickedInBell && !clickedInPortal) {
         setShowNotifications(false);
+      }
+      // close profile dropdown if click outside profile button/portal
+      if (!clickedInProfile && !clickedInProfilePortal) {
+        setShowProfileDropdown(false);
       }
     };
 
@@ -80,21 +101,62 @@ const Navbar = ({ onToggleSidebar, sidebarOpen }) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // compute portal position when dropdown opens
   useEffect(() => {
-    // Add event listener for profile dropdown close on outside click
-    const handleProfileDropdownClickOutside = (event) => {
-      if (
-        profileDropdownRef.current &&
-        !profileDropdownRef.current.contains(event.target)
-      ) {
-        setShowProfileDropdown(false);
+    if (!showNotifications) return;
+    const computePos = () => {
+      if (!notificationRef.current) return;
+      const rect = notificationRef.current.getBoundingClientRect();
+      const top = rect.bottom + 8 + window.scrollY;
+      // Desktop: keep a moderate width relative to viewport; Mobile: use larger fraction so it feels full-width
+      const width = window.innerWidth < 768
+        ? Math.min(420, Math.max(260, window.innerWidth * 0.9))
+        : Math.min(420, Math.max(300, window.innerWidth * 0.28));
+      // Anchor strategy:
+      // - mobile / narrow screens: anchor to the left edge of the bell (rect.left)
+      // - desktop / wide screens: align the dropdown's right edge with the bell's right edge
+      let left;
+      if (window.innerWidth < 1024) {
+        left = rect.left;
+      } else {
+        left = rect.right - width;
       }
+      // Clamp so dropdown never overflows viewport (8px padding)
+      left = Math.max(8, Math.min(left, window.innerWidth - width - 8));
+      setDropdownStyle({ top, left, width });
     };
-    if (showProfileDropdown) {
-      document.addEventListener("mousedown", handleProfileDropdownClickOutside);
-    }
+    computePos();
+    window.addEventListener("resize", computePos);
+    window.addEventListener("scroll", computePos, true);
     return () => {
-      document.removeEventListener("mousedown", handleProfileDropdownClickOutside);
+      window.removeEventListener("resize", computePos);
+      window.removeEventListener("scroll", computePos, true);
+    };
+  }, [showNotifications]);
+
+  // compute profile portal position when profile dropdown opens
+  useEffect(() => {
+    if (!showProfileDropdown) return;
+    const computePos = () => {
+      if (!profileRef.current) return;
+      const rect = profileRef.current.getBoundingClientRect();
+      const top = rect.bottom + 8 + window.scrollY;
+      const width = Math.min(360, Math.max(220, window.innerWidth < 768 ? window.innerWidth * 0.9 : 320));
+      let left;
+      if (window.innerWidth < 1024) {
+        left = rect.left;
+      } else {
+        left = rect.right - width;
+      }
+      left = Math.max(8, Math.min(left, window.innerWidth - width - 8));
+      setProfileDropdownStyle({ top, left, width });
+    };
+    computePos();
+    window.addEventListener("resize", computePos);
+    window.addEventListener("scroll", computePos, true);
+    return () => {
+      window.removeEventListener("resize", computePos);
+      window.removeEventListener("scroll", computePos, true);
     };
   }, [showProfileDropdown]);
 
@@ -204,6 +266,14 @@ const Navbar = ({ onToggleSidebar, sidebarOpen }) => {
     navigate("/login");
   };
 
+  const saveCompanyColor = (companyId, color) => {
+    const next = { ...companyColors, [companyId]: color };
+    setCompanyColors(next);
+    try { localStorage.setItem("companyColors", JSON.stringify(next)); } catch {}
+    // close profile dropdown after selecting a color
+    setShowProfileDropdown(false);
+  };
+
   return (
     <div className="relative py-4 lg:py-6 xl:py-[30px] flex flex-col lg:flex-row items-start lg:items-center justify-between mx-4 lg:mx-6 xl:mx-[35px] border-b border-grayDash font-radioCanada">
       {/* Breadcrumb + Mobile Controls */}
@@ -254,7 +324,7 @@ const Navbar = ({ onToggleSidebar, sidebarOpen }) => {
           <div className="relative" ref={notificationRef}>
             <button
               onClick={() => setShowNotifications(!showNotifications)}
-              className="relative p-2.5 hover:bg-[#2A2A2A] rounded-xl transition-colors"
+              className="relative p-2.5 hover:bg-gray4 rounded-xl transition-colors"
             >
               <HiOutlineBell
                 size={24}
@@ -272,75 +342,98 @@ const Navbar = ({ onToggleSidebar, sidebarOpen }) => {
             </button>
 
             {/* Notifications Dropdown */}
-            <AnimatePresence>
-              {showNotifications && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  className="absolute right-0 top-full mt-2 w-[380px] min-h-[220px] bg-[#1E1E1E] rounded-xl shadow-lg border border-[#2A2A2A] overflow-hidden z-50"
-                  style={{ minHeight: "220px", maxHeight: "400px" }}
-                >
-                  {/* Header */}
-                  <div className="p-4 border-b border-[#2A2A2A] flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <HiOutlineBell size={20} className="text-[#777C9D]" />
-                      <h3 className="text-white font-medium">Notifications</h3>
-                      {unreadCount > 0 && (
-                        <span className="bg-pink2/10 text-pink2 text-xs px-2 py-1 rounded-full">
-                          {unreadCount} new
-                        </span>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => navigate("/notifications")}
-                      className="text-sm text-[#777C9D] hover:text-white transition-colors"
+            {/*
+              Render dropdown into root via portal to avoid z-index/stacking issues.
+              portalRef used so outside-click detection ignores clicks inside this portal.
+            */}
+            {showNotifications &&
+              ReactDOM.createPortal(
+                <AnimatePresence>
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 8 }}
+                    ref={portalRef}
+                    style={{
+                      position: "fixed",
+                      top: dropdownStyle.top,
+                      left: dropdownStyle.left,
+                      width: dropdownStyle.width,
+                      zIndex: 11000,
+                      minHeight: 220,
+                      maxHeight: 400,
+                    }}
+                  >
+                    <div
+                      className="bg-black rounded-xl shadow-lg border border-[#2A2A2A] overflow-hidden"
+                      style={{ width: "100%", maxHeight: 400 }}
                     >
-                      View all
-                    </button>
-                  </div>
+                      {/* Header */}
+                      <div className="p-4 border-b border-[#2A2A2A] flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <HiOutlineBell size={20} className="text-[#777C9D]" />
+                          <h3 className="text-white font-medium">Notifications</h3>
+                          {unreadCount > 0 && (
+                            <span className="bg-pink2/10 text-pink2 text-xs px-2 py-1 rounded-full">
+                              {unreadCount} new
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => {
+                            setShowNotifications(false);
+                            navigate("/notifications");
+                          }}
+                          className="text-sm text-[#777C9D] hover:text-white transition-colors"
+                        >
+                          View all
+                        </button>
+                      </div>
 
-                  <div className="max-h-[400px] overflow-y-auto custom-scrollbar">
-                    {recentNotifications.length === 0 ? (
-                      <div className="p-8 text-center text-[#777C9D] flex flex-col items-center gap-3">
-                        <HiOutlineBell size={24} />
-                        <p>No notifications yet</p>
-                      </div>
-                    ) : (
-                      <div className="divide-y divide-[#2A2A2A]">
-                        {recentNotifications.map((notification) => (
-                          <div
-                            key={notification.id}
-                            className={`p-4 flex items-start gap-3 hover:bg-[#2A2A2A] transition-colors cursor-pointer ${!notification.isRead ? "bg-[#2A2A2A]/50" : ""
-                              }`}
-                            onClick={() =>
-                              handleNotificationClick(notification.id)
-                            }
-                          >
-                            <div className="mt-1 flex-shrink-0">
-                              {getNotificationIcon(notification.type)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-white text-sm break-words">
-                                {notification.text}
-                              </p>
-                              <p className="text-[#777C9D] text-xs mt-1">
-                                {formatTimestamp(
-                                  new Date(notification.createdAt)
-                                )}
-                              </p>
-                            </div>
-                            {!notification.isRead && (
-                              <div className="w-2 h-2 rounded-full bg-pink2 mt-2 flex-shrink-0" />
-                            )}
+                      <div className="max-h-[400px] overflow-y-auto custom-scrollbar">
+                        {recentNotifications.length === 0 ? (
+                          <div className="p-8 text-center text-[#777C9D] flex flex-col items-center gap-3">
+                            <HiOutlineBell size={24} />
+                            <p>No notifications yet</p>
                           </div>
-                        ))}
+                        ) : (
+                          <div className="divide-y divide-[#2A2A2A]">
+                            {recentNotifications.map((notification) => (
+                              <div
+                                key={notification.id}
+                                className={`p-4 flex items-start gap-3 hover:bg-[#2A2A2A] transition-colors cursor-pointer ${!notification.isRead ? "bg-[#2A2A2A]/50" : ""
+                                  }`}
+                                onClick={() => {
+                                  setShowNotifications(false);
+                                  handleNotificationClick(notification.id);
+                                }}
+                              >
+                                <div className="mt-1 flex-shrink-0">
+                                  {getNotificationIcon(notification.type)}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-white text-sm break-words">
+                                    {notification.text}
+                                  </p>
+                                  <p className="text-[#777C9D] text-xs mt-1">
+                                    {formatTimestamp(
+                                      new Date(notification.createdAt)
+                                    )}
+                                  </p>
+                                </div>
+                                {!notification.isRead && (
+                                  <div className="w-2 h-2 rounded-full bg-pink2 mt-2 flex-shrink-0" />
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                </motion.div>
+                    </div>
+                  </motion.div>
+                </AnimatePresence>,
+                (typeof document !== "undefined" && document.getElementById("root")) || document.body
               )}
-            </AnimatePresence>
           </div>
 
           {selectedRole?.type === "AUTHOR" && (
@@ -353,7 +446,7 @@ const Navbar = ({ onToggleSidebar, sidebarOpen }) => {
             </div>
           )}
 
-          <div className="relative">
+          <div className="relative" ref={profileRef}>
             <div
               className="profile flex items-center bg-grayDash rounded-[9px] py-2 lg:py-[7px] px-3 lg:px-[12px] gap-2 lg:gap-[9px] hover:bg-gray transition-all duration-300 cursor-pointer w-full lg:w-auto h-[40px]"
               onClick={() => setShowProfileDropdown((v) => !v)}
@@ -363,13 +456,17 @@ const Navbar = ({ onToggleSidebar, sidebarOpen }) => {
                   {user?.firstName ? user.firstName : user.email}
                 </p>
                 <div className="flex gap-[3px]">
-                  <span className="text-[10px] lg:text-[11px] text-pink2">
+                  <span
+                    className="text-[10px] lg:text-[11px] font-semibold"
+                    // default to second color in palette (purple) when no saved color
+                    style={{ color: companyColors[selectedRole?.company?.id] || colorPalette[1] }}
+                  >
                     {selectedRole?.company?.name}
                   </span>
                   <p className="text-[10px] lg:text-[11px] text-white">
                     {selectedRole?.company?.plan
                       ? selectedRole?.company?.plan?.name
-                      : "Free plan"}
+                      : "Free"}
                   </p>
                 </div>
               </div>
@@ -385,50 +482,90 @@ const Navbar = ({ onToggleSidebar, sidebarOpen }) => {
                 />
               </div>
             </div>
-            {/* Profile Dropdown */}
-            {showProfileDropdown && (
-              <div
-                ref={profileDropdownRef}
-                className="absolute right-0 mt-2 w-64 bg-black rounded-xl shadow-lg border border-[#2A2A2A] z-50"
-              >
-                <div className="p-4 border-b border-[#2A2A2A]">
-                  <p className="text-white font-semibold mb-2">Your Companies</p>
-                  <ul className="space-y-2">
-                    {(user?.roles || [])
-                      .filter((role) => role.member?.status !== "CANCELLED")
-                      .map((role) => (
-                        <li key={role.company.id}>
-                          <button
-                            className={`w-full text-left px-3 py-2 rounded-lg text-[#C4E1FE] hover:bg-pink2/10 transition ${selectedRole?.company?.id === role.company.id
-                                ? "bg-pink2/20"
-                                : ""
-                              }`}
-                            onClick={() => {
-                              changeCompany({ roleId: role.id });
-                              setSelectedRole(role);
-                              setShowProfileDropdown(false);
-                            }}
-                          >
-                            {role.company.name}{" "}
-                            <span className="text-xs text-[#777C9D]">
-                              ({role.company.plan?.name || "Free plan"})
-                            </span>
-                          </button>
-                        </li>
-                      ))}
-                  </ul>
-                </div>
-                <div className="p-4">
-                  <button
-                    className="w-full bg-pink2 text-white py-2 rounded-lg font-semibold hover:bg-pink2/90 transition"
-                    onClick={handleLogout}
+            {/* Profile Dropdown rendered via portal so position and z-index match notifications */}
+            {showProfileDropdown &&
+              ReactDOM.createPortal(
+                <AnimatePresence>
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 8 }}
+                    ref={profilePortalRef}
+                    style={{
+                      position: "fixed",
+                      top: profileDropdownStyle.top,
+                      left: profileDropdownStyle.left,
+                      width: profileDropdownStyle.width,
+                      zIndex: 11000,
+                    }}
                   >
-                    Logout
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+                    <div className="bg-black rounded-xl shadow-lg border border-[#2A2A2A] overflow-hidden">
+                      <div className="p-4 border-b border-[#2A2A2A]">
+                        <div className="flex items-center justify-between mb-3">
+                          <p className="text-white font-semibold">Your Companies</p>
+                          {/* color palette for the currently selected company */}
+                          {selectedRole?.company?.id && (
+                            <div className="flex items-center gap-2">
+                              {colorPalette.map((c) => (
+                                <button
+                                  key={c}
+                                  aria-label="Pick color"
+                                  onClick={() => saveCompanyColor(selectedRole.company.id, c)}
+                                  className="w-6 h-6 rounded-full border-2 border-transparent hover:border-white transition"
+                                  style={{
+                                    background: c,
+                                    boxShadow: companyColors[selectedRole.company.id] === c ? "0 0 0 2px rgba(255,255,255,0.08)" : undefined,
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <ul className="space-y-2">
+                          {(user?.roles || [])
+                            .filter((role) => role.member?.status !== "CANCELLED")
+                            .map((role) => (
+                              <li key={role.company.id} className="flex items-center gap-2">
+                                <button
+                                  className={`w-full text-left px-3 py-2 rounded-lg text-[#C4E1FE] hover:bg-white/5 transition flex items-center justify-between`}
+                                  onClick={() => {
+                                    changeCompany({ roleId: role.id });
+                                    setSelectedRole(role);
+                                    setShowProfileDropdown(false);
+                                  }}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <span
+                                      className="w-3 h-3 rounded-full"
+                                      // default to second color in palette (purple) when no saved color
+                                      style={{ background: companyColors[role.company.id] || colorPalette[1] }}
+                                    />
+                                    <div>
+                                      <div className="font-medium text-white">{role.company.name}</div>
+                                      <div className="text-xs text-[#777C9D]">({role.company.plan?.name || "Free plan"})</div>
+                                    </div>
+                                  </div>
+                                </button>
+                                {/* quick color picker per company */}
+
+                              </li>
+                            ))}
+                        </ul>
+                      </div>
+                      <div className="p-4">
+                        <button
+                          className="w-full bg-pink2 text-white py-2 rounded-lg font-semibold hover:bg-pink2/90 transition"
+                          onClick={handleLogout}
+                        >
+                          Logout
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                </AnimatePresence>,
+                (typeof document !== "undefined" && document.getElementById("root")) || document.body
+              )}
+           </div>
         </div>
       </div>
 

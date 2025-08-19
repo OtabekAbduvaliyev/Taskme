@@ -57,19 +57,36 @@ const SheetTableItem = ({
       return;
     }
 
-    // Duedate fields (single "duedate" or numbered duedate1..5) -> always send array ["YYYY-MM-DD","YYYY-MM-DD"]
+    // Duedate fields (single "duedate" or numbered duedate1..5) -> always send array ["isoStart","isoEnd"]
     if (/^duedate(?:[1-5])?$/i.test(key)) {
       let value;
       if (Array.isArray(e) && e.length === 2) {
-        value = [
-          e[0] && typeof e[0].format === "function" ? e[0].format("YYYY-MM-DD") : "",
-          e[1] && typeof e[1].format === "function" ? e[1].format("YYYY-MM-DD") : "",
-        ];
+        const toIso = (val) => {
+          if (!val) return "";
+          try {
+            // prefer direct toISOString if available (Date/moment/dayjs)
+            if (typeof val.toISOString === "function") return val.toISOString();
+            // fallback to dayjs to produce ISO (handles moment/dayjs/string)
+            return dayjs(val).toISOString();
+          } catch {
+            try { return new Date(val).toISOString(); } catch { return ""; }
+          }
+        };
+        value = [toIso(e[0]), toIso(e[1])];
       } else {
         // cleared or invalid -> keep consistent array shape
         value = ["", ""];
       }
       onChange(task.id, taskKey, value);
+      return;
+    }
+
+    // Link/website fields -> always send as array (single value array or empty array)
+    if (["links", "website"].includes(key)) {
+      // accept either event-like object or raw string
+      const rawVal = e?.target?.value ?? (typeof e === "string" ? e : "");
+      const arr = rawVal ? [rawVal] : [];
+      onChange(task.id, taskKey, arr);
       return;
     }
 
@@ -642,7 +659,7 @@ const SheetTableItem = ({
           value={rangeValue}
           onChange={(dates) => handleInputChange(lowerKey, dates)}
           format="YYYY-MM-DD"
-          className="w-full bg-grayDash text-white text-[18px] rounded px-2 py-1"
+          className="w-full bg-grayDash !text-white text-[18px] rounded px-2 py-1 "
           placeholder={placeholder}
           allowClear
         />
@@ -693,15 +710,16 @@ const SheetTableItem = ({
         </div>
       );
     }
+console.log(lowerKey);
 
     // Link input
-    if (["link", "website"].includes(lowerKey)) {
-      const value = task[lowerKey] || "";
+    if (["links"].includes(lowerKey)) {
+      // task value may be stored as array; show first element or empty string
+      const raw = task[lowerKey];
+      const value = Array.isArray(raw) ? raw[0] || "" : raw || "";
       const handleLinkChange = (e) => {
-        const val = e.target.value;
-        if (/^https?:\/\/\S+\.\S+/.test(val) || val === "") {
-          handleInputChange(lowerKey, e);
-        }
+        // Accept any intermediate text while typing (validation/opening handled elsewhere)
+        handleInputChange(lowerKey, e); // handleInputChange will wrap into array
       };
       const handleDoubleClick = () => {
         if (/^https?:\/\/\S+\.\S+/.test(value)) {
@@ -714,11 +732,8 @@ const SheetTableItem = ({
             className="bg-grayDash border-none focus:bg-gray3 hover:bg-grayDash text-white text-[18px] underline placeholder-white"
             value={value}
             onChange={handleLinkChange}
-            type="url"
+            type="text"
             placeholder="https://example.com"
-            required
-            onClick={(e) => e.stopPropagation()}
-            onDoubleClick={handleDoubleClick}
           />
         </div>
       );
@@ -1285,4 +1300,3 @@ const SheetTableItem = ({
 
 
 export default SheetTableItem;
-

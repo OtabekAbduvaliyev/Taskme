@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import logo from "../../assets/b4a0bd5e0894dd27c9b0053b36ac6208.png";
 import { IoSettingsSharp } from "react-icons/io5";
 import Workspaces from "./Workspaces";
@@ -7,8 +7,6 @@ import Viewers from "./Viewers";
 import { useQuery } from "@tanstack/react-query";
 import axiosInstance from "../../AxiosInctance/AxiosInctance";
 import { Link } from "react-router-dom";
-import Settings from "../Settings/Settings";
-import { createPortal } from "react-dom";
 
 const Sidebar = () => {
   const token = localStorage.getItem("token");
@@ -23,7 +21,6 @@ const Sidebar = () => {
   const role = user?.roles
     ?.find((i) => i.id === user.selectedRole)
     ?.type?.toLowerCase();
-  const [showSettings, setShowSettings] = useState(false);
 
   return (
     <>
@@ -60,12 +57,8 @@ const Sidebar = () => {
         }
 
         <Link
-          to="#"
+          to="/settings"
           className="settings mt-auto pt-[30px] pb-3 px-1"
-          onClick={e => {
-            e.preventDefault();
-            setShowSettings(true);
-          }}
         >
           <button className="flex w-full bg-white rounded-[9px] py-3 lg:py-3 xl:py-[10px] px-5 lg:px-5 xl:pl-[20px] gap-2 lg:gap-[3px] items-center font-radioCanada hover:bg-gray-100 transition-colors">
             <IoSettingsSharp className="text-lg lg:text-xl xl:text-[22px] text-grayDash" />
@@ -73,14 +66,9 @@ const Sidebar = () => {
           </button>
         </Link>
       </div>
-      {showSettings &&
-        createPortal(
-          <Settings onClose={() => setShowSettings(false)} />,
-          document.body
-        )
-      }
     </>
   );
 };
 
 export default Sidebar;
+

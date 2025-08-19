@@ -128,6 +128,60 @@ function PaymentModal({ open, onClose, children }) {
   );
 }
 
+// New: Success modal shown after successful subscription purchase
+const SuccessModal = ({ open, plan, onClose, onStart }) => {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      <div className="relative w-full max-w-2xl bg-gradient-to-br from-pink2/10 via-[#2B2540] to-[#0f1724] rounded-2xl shadow-2xl border border-pink2/20 overflow-hidden">
+        {/* Decorative top band */}
+        <div className="absolute -top-10 -left-20 w-56 h-56 rounded-full bg-gradient-to-r from-pink2 to-[#7C3AED] opacity-20 blur-2xl pointer-events-none" />
+        <div className="p-8 sm:p-12 text-center">
+          <div className="mx-auto mb-4 w-20 h-20 rounded-full bg-gradient-to-br from-pink2 to-pink2/70 flex items-center justify-center shadow-lg">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" className="text-white">
+              <path d="M12 2v6" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M6.5 9.5L12 14l5.5-4.5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M5 20h14" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+
+          <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">Subscription activated!</h2>
+          <p className="text-md text-white/80 mb-4">
+            Your <span className="font-semibold text-pink2">{plan?.name || "plan"}</span> is now active.
+            You're all set — let's get you started.
+          </p>
+
+          <div className="max-w-xl mx-auto text-left bg-[rgba(255,255,255,0.02)] p-4 rounded-lg border border-[rgba(255,255,255,0.03)] mb-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-white font-semibold">{plan?.name || "Plan"}</div>
+                <div className="text-gray4 text-sm">{plan?.description || "Happy productivity!"}</div>
+              </div>
+              <div className="text-right">
+                <div className="text-pink2 font-extrabold text-lg">{plan?.price === 0 ? "$0" : `$${plan?.price}`}</div>
+                <div className="text-gray4 text-xs">per month</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <button
+              onClick={onStart}
+              className="px-8 py-3 rounded-2xl bg-pink2 text-white font-semibold shadow-lg transform hover:-translate-y-0.5 transition"
+            >
+              Start working
+            </button>
+          </div>
+
+          <div className="mt-4 text-xs text-white/60">
+            Tip: Check your dashboard for templates, workspaces and quick-start guides to ramp up faster.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const Subscriptions = () => {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -136,6 +190,10 @@ const Subscriptions = () => {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [modalPlan, setModalPlan] = useState(null);
   const navigate = useNavigate(); // add this line
+
+  // NEW: success modal state
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successPayload, setSuccessPayload] = useState(null);
 
   useEffect(() => {
     const fetchPlans = async () => {
@@ -254,10 +312,13 @@ const Subscriptions = () => {
             <PaymentForm
               plan={modalPlan}
               onSuccess={(paymentIntent) => {
+                // Show success modal instead of immediate navigation
                 setMessage("Payment succeeded — subscription active!");
                 setShowPaymentModal(false);
+                // capture plan/payment for success modal
+                setSuccessPayload({ plan: modalPlan, paymentIntent });
                 setModalPlan(null);
-                navigate("/dashboard"); // navigate after payment
+                setShowSuccessModal(true);
               }}
               onCancel={() => {
                 setShowPaymentModal(false);
@@ -266,9 +327,32 @@ const Subscriptions = () => {
             />
           )}
         </PaymentModal>
+
+        {/* Success modal shown after payment. Clicking Start working navigates to dashboard */}
+        <SuccessModal
+          open={showSuccessModal}
+          plan={successPayload?.plan}
+          onClose={() => {
+            setShowSuccessModal(false);
+            setSuccessPayload(null);
+          }}
+          onStart={() => {
+            setShowSuccessModal(false);
+            // optional: store a small flag so dashboard can show onboarding if needed
+            try {
+              sessionStorage.setItem("freshSubscription", JSON.stringify({
+                plan: successPayload?.plan || null,
+                at: Date.now()
+              }));
+            } catch {}
+            navigate("/dashboard");
+          }}
+        />
+
       </div>
     </Elements>
   );
 };
 
 export default Subscriptions;
+

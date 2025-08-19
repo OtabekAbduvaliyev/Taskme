@@ -1,5 +1,5 @@
 import React, { Fragment, useEffect, useState } from 'react';
-import { MdSearch, MdDelete, MdEdit, MdVisibility, MdBusiness, MdWorkspaces, MdGroup, MdTask, MdPayments, MdClose } from 'react-icons/md';
+import { MdSearch, MdDelete, MdEdit, MdVisibility, MdBusiness, MdWorkspaces, MdGroup, MdTask, MdClose } from 'react-icons/md';
 import axiosInstance from '../../../AxiosInctance/AxiosInctance';
 import { Dropdown } from 'antd';
 import Toast from '../../../Components/Modals/Toast';
@@ -19,8 +19,9 @@ const AdminCompanies = () => {
   const [isActive, setIsActive] = useState('');
   const [isBlocked, setIsBlocked] = useState('');
   const [name, setName] = useState('');
-  const [authorId, setAuthorId] = useState('');
   const [planId, setPlanId] = useState('');
+  // plans loaded from API for the plan select
+  const [plans, setPlans] = useState([]);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [sortBy, setSortBy] = useState('');
@@ -69,7 +70,6 @@ const AdminCompanies = () => {
         isBlocked: isBlocked !== '' ? isBlocked : undefined,
         search: search || undefined,
         name: name || undefined,
-        authorId: authorId || undefined,
         planId: planId || undefined,
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
@@ -94,7 +94,23 @@ const AdminCompanies = () => {
   useEffect(() => {
     fetchCompanies();
     // eslint-disable-next-line
-  }, [status, isActive, isBlocked, name, authorId, planId, page, limit, sortBy, sortOrder]);
+  }, [status, isActive, isBlocked, name, planId, page, limit, sortBy, sortOrder]);
+
+  // fetch plans for the plan select (mount)
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    axiosInstance.get('/plan', {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(res => {
+        // API returns an array of plans
+        setPlans(res.data || []);
+      })
+      .catch(() => {
+        // silent fail; keep plans empty
+        setPlans([]);
+      });
+  }, []);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -305,40 +321,50 @@ const AdminCompanies = () => {
     <div className="w-full">
       <h2 className="text-2xl font-radioCanada text-white mb-8">Company Management</h2>
       
-      <form onSubmit={handleSearch} className="flex flex-wrap gap-4 mb-6 items-center bg-grayDash rounded-xl px-6 py-4">
-        <div className="flex items-center gap-2 bg-gray3 rounded-lg px-3 py-2">
+      {/* Responsive filter grid */}
+      <form onSubmit={handleSearch} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-6 items-center bg-grayDash rounded-xl px-4 py-4">
+        <div className="flex items-center gap-2 bg-gray3 rounded-lg px-3 py-2 col-span-1 sm:col-span-2 md:col-span-1">
           <MdSearch className="text-white2" />
           <input
             type="text"
             placeholder="Search"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="bg-transparent outline-none text-white2 placeholder:text-white2"
+            className="bg-transparent outline-none text-white2 placeholder:text-white2 w-full"
           />
         </div>
+
         <select value={status} onChange={e => setStatus(e.target.value)} className="bg-gray3 text-white2 rounded-lg px-3 py-2">
+          <option value="">Status</option>
           {STATUS_OPTIONS.map(opt => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
           ))}
         </select>
+
         <select value={isActive} onChange={e => setIsActive(e.target.value)} className="bg-gray3 text-white2 rounded-lg px-3 py-2">
           <option value="">Active Status</option>
           <option value="true">Active</option>
           <option value="false">Inactive</option>
         </select>
+
         <select value={isBlocked} onChange={e => setIsBlocked(e.target.value)} className="bg-gray3 text-white2 rounded-lg px-3 py-2">
           <option value="">Blocked Status</option>
           <option value="true">Blocked</option>
           <option value="false">Unblocked</option>
         </select>
+
         <input type="text" placeholder="Company Name" value={name} onChange={e => setName(e.target.value)} className="bg-gray3 text-white2 rounded-lg px-3 py-2" />
-        <input type="text" placeholder="Author ID" value={authorId} onChange={e => setAuthorId(e.target.value)} className="bg-gray3 text-white2 rounded-lg px-3 py-2" />
-        <input type="text" placeholder="Plan ID" value={planId} onChange={e => setPlanId(e.target.value)} className="bg-gray3 text-white2 rounded-lg px-3 py-2" />
+        <select value={planId} onChange={e => setPlanId(e.target.value)} className="bg-gray3 text-white2 rounded-lg px-3 py-2">
+          <option value="">All Plans</option>
+          {plans.map(p => <option key={p.id || p._id} value={p.id || p._id}>{p.name}</option>)}
+        </select>
         <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="bg-gray3 text-white2 rounded-lg px-3 py-2" />
         <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="bg-gray3 text-white2 rounded-lg px-3 py-2" />
-        <button type="submit" className="bg-pink2 text-white rounded-lg px-6 py-2 font-radioCanada hover:bg-pink transition-colors">
-          Filter
-        </button>
+
+        {/* Filter button spans full width on small screens */}
+        <div className="col-span-1 sm:col-span-2 md:col-span-1">
+          <button type="submit" className="w-full bg-pink2 text-white rounded-lg px-6 py-2 font-radioCanada hover:bg-pink transition-colors">Filter</button>
+        </div>
       </form>
 
       <div className="mb-4">
@@ -352,9 +378,48 @@ const AdminCompanies = () => {
       {loading && <div className="text-white2">Loading...</div>}
       {error && <div className="text-red-400">{error}</div>}
       {!loading && !companies.length && <div className="text-white2">No companies found.</div>}
-      
+
+      {/* Mobile cards: visible on small screens, hidden on md+ */}
+      {!loading && companies.length > 0 && (
+        <div className="space-y-4 md:hidden">
+          {companies.map(c => (
+            <div key={c.id || c._id} className="bg-grayDash rounded-xl p-4 flex flex-col sm:flex-row items-start justify-between gap-3">
+              <div className="flex-1">
+                <div className="flex items-center gap-3">
+                  <MdBusiness className="text-yellow" />
+                  <div>
+                    <div className="text-white font-semibold">{c.name}</div>
+                    <div className="text-white2 text-sm">{c.ownerEmail || c.contactEmail || '—'}</div>
+                  </div>
+                </div>
+
+                <div className="mt-3 text-white2 text-sm grid grid-cols-2 gap-2">
+                  <div>Plan: <span className="font-bold text-white">{c.currentPlan?.name ?? '—'}</span></div>
+                  <div className="text-right">Price: <span className="font-bold text-white">{c.currentPlan?.price !== undefined ? `$${c.currentPlan.price}` : '—'}</span></div>
+                  <div>Status: <span className="font-bold text-white">{c.status ?? 'N/A'}</span></div>
+                  <div className="text-right">Blocked: <span className="font-bold text-white">{c.isBlocked ? 'Yes' : 'No'}</span></div>
+                </div>
+
+                <div className="mt-3 flex items-center gap-3 text-white2">
+                  <span title="Workspaces" className="flex items-center gap-1"><MdWorkspaces className="text-pink2" /> {c.workspaceCount ?? 0}</span>
+                  <span title="Members" className="flex items-center gap-1"><MdGroup className="text-pink2" /> {c.memberCount ?? 0}</span>
+                  <span title="Tasks" className="flex items-center gap-1"><MdTask className="text-pink2" /> {c.taskCount ?? 0}</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col items-end gap-2">
+                <button onClick={() => handleViewCompany(c.id || c._id)} className="bg-gray3 text-white2 rounded-md px-3 py-1 text-sm">View</button>
+                <button onClick={() => handleEditCompanyClick(c)} className="bg-gray3 text-white2 rounded-md px-3 py-1 text-sm">Edit</button>
+                <button onClick={() => handleDeleteCompanyClick(c.id || c._id)} className="bg-selectRed1 text-white rounded-md px-3 py-1 text-sm">Delete</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Desktop table: hidden on small screens, visible md+ */}
       {!loading && !!companies.length && (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto hidden md:block">
           <table className="w-full bg-grayDash rounded-xl">
             <thead>
               <tr className="bg-gray3 text-white2">
@@ -376,13 +441,11 @@ const AdminCompanies = () => {
                     </td>
                     <td className="py-2 px-4">{company.status}</td>
                     <td className="py-2 px-4">
-                      {company.currentPlan?.name} 
-                      <span className="text-pink2">${company.currentPlan?.price}</span>
+                      {company.currentPlan?.name}
+                      {company.currentPlan?.price !== undefined && <span className="text-pink2 ml-2">${company.currentPlan.price}</span>}
                     </td>
                     <td className="py-2 px-4">
-                      {company.author
-                        ? `${company.author.firstName} ${company.author.lastName}`
-                        : company.authorId}
+                      {company.author ? `${company.author.firstName} ${company.author.lastName}` : company.authorId}
                     </td>
                     <td className="py-2 px-4">
                       <div className="flex items-center gap-3">

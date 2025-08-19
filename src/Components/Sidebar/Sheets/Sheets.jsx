@@ -434,7 +434,7 @@ console.log(data);
                       onClick={addNewTask}
                     >
                       <IoAddCircleOutline className="text-[20px] sm:text-[22px]" />
-                      <p className="font-[500] text-[13px] sm:text-[14px]">New project</p>
+                      <p className="font-[500] text-[13px] sm:text-[14px]">New Task</p>
                     </button>
                   </div>
                   <div className="search inputsr">
@@ -545,19 +545,57 @@ console.log(data);
                         isMoveModalOpen={isMoveModalOpen}
                         setIsMoveModalOpen={setIsMoveModalOpen}
                         handleDeleteTasks={handleDeleteTasks}
-                        isCreatingTask={isCreatingTask} // Pass loading state to table
+                        isCreatingTask={isCreatingTask}
                       />
                     )}
                     {view === "list" && (
-                      <div className="flex flex-col items-center justify-center h-[300px] bg-grayDash rounded-[12px] mt-[26px]">
-                        <div className="text-pink2 text-[22px] font-bold mb-2">List View</div>
-                        <div className="text-gray4 text-[16px] font-radioCanada">Coming Soon</div>
+                      <div className="mt-[26px] flex items-center justify-center">
+                        <div className="bg-grayDash rounded-[12px] p-8 flex flex-col items-center gap-3 text-center max-w-md">
+                          <FaListUl className="text-pink2 text-[36px]" />
+                          <div className="text-white font-bold text-xl">Coming Soon</div>
+                          <div className="text-gray4 text-sm">List view is on the way — a compact, fast-scanning layout for tasks.</div>
+                          <div className="flex gap-3 mt-3">
+                            <button
+                              className="bg-white text-pink2 px-4 py-2 rounded"
+                              onClick={() => setView("table")}
+                            >
+                              Open Table
+                            </button>
+                            <button
+                              className="border border-gray-600 text-white px-4 py-2 rounded"
+                              onClick={() =>
+                                setToast({ isOpen: true, type: "info", message: "We'll notify you when List view is ready." })
+                              }
+                            >
+                              Notify me
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     )}
                     {view === "calendar" && (
-                      <div className="flex flex-col items-center justify-center h-[300px] bg-grayDash rounded-[12px] mt-[26px]">
-                        <div className="text-pink2 text-[22px] font-bold mb-2">Calendar View</div>
-                        <div className="text-gray4 text-[16px] font-radioCanada">Coming Soon</div>
+                      <div className="mt-[26px] flex items-center justify-center">
+                        <div className="bg-grayDash rounded-[12px] p-8 flex flex-col items-center gap-3 text-center max-w-md">
+                          <IoMdCalendar className="text-pink2 text-[36px]" />
+                          <div className="text-white font-bold text-xl">Coming Soon</div>
+                          <div className="text-gray4 text-sm">Calendar view is coming soon — a visual, date-based view of your tasks.</div>
+                          <div className="flex gap-3 mt-3">
+                            <button
+                              className="bg-white text-pink2 px-4 py-2 rounded"
+                              onClick={() => setView("table")}
+                            >
+                              Open Table
+                            </button>
+                            <button
+                              className="border border-gray-600 text-white px-4 py-2 rounded"
+                              onClick={() =>
+                                setToast({ isOpen: true, type: "info", message: "We'll notify you when Calendar view is ready." })
+                              }
+                            >
+                              Notify me
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </motion.div>
@@ -610,3 +648,4 @@ console.log(data);
 
 
 export default Sheets;
+                            

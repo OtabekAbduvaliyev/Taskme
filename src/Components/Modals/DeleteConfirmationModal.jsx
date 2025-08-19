@@ -19,7 +19,7 @@ const DeleteConfirmationModal = ({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           // Fullscreen overlay, always centered
-          className="fixed inset-0 z-[9999] flex items-center justify-center"
+          className="fixed inset-0 z-[9999] flex items-center justify-center px-[20px]"
           style={{
             position: 'fixed',
             top: 0, left: 0, right: 0, bottom: 0,
@@ -57,7 +57,7 @@ const DeleteConfirmationModal = ({
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
             transition={{ type: "spring", duration: 0.5 }}
-            className="relative bg-[#1E1E1E] rounded-2xl w-full max-w-md overflow-hidden"
+            className="relative bg-[#1E1E1E] rounded-2xl w-full max-w-md overflow-hidden "
             style={{
               zIndex: 1,
               minWidth: 340,

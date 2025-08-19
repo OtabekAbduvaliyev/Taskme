@@ -162,35 +162,37 @@ const AdminPlans = () => {
     <div>
       <h2 className="text-2xl font-radioCanada text-white mb-8">Plans Management</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {/* Plans List - scrollable */}
-        <div className="bg-grayDash rounded-2xl px-8 py-8 overflow-x-auto max-h-[600px] min-h-[400px] custom-scrollbar">
+        {/* Plans List - scrollable vertically, responsive padding */}
+        <div className="bg-grayDash rounded-2xl px-6 md:px-8 py-6 md:py-8 overflow-y-auto max-h-[60vh] custom-scrollbar">
           <h3 className="text-lg text-white mb-4 font-radioCanada">All Plans</h3>
           {loading && <div className="text-white2">Loading...</div>}
-          <div className="w-full min-w-[340px]">
+          <div className="w-full">
             <ul className="space-y-4">
               {plans.length === 0 && !loading && <li className="text-white2">No plans found.</li>}
               {plans.map(plan => (
-                <li key={plan.id || plan.name} className="bg-gray3 rounded-lg p-4 text-white2">
-                  <div className="font-bold text-white">{plan.name}</div>
-                  <div className="text-xs mb-2">{plan.description}</div>
-                  <div className="flex flex-wrap gap-4 text-xs">
-                    <span>Price: <span className="text-pink2">${plan.price}</span></span>
-                    <span>Workspaces: {plan.maxWorkspaces}</span>
-                    <span>Sheets: {plan.maxSheets}</span>
-                    <span>Members: {plan.maxMembers}</span>
-                    <span>Viewers: {plan.maxViewers}</span>
-                    <span>Tasks: {plan.maxTasks}</span>
+                <li key={plan.id || plan.name} className="bg-gray3 rounded-lg p-4 text-white2 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                  <div>
+                    <div className="font-bold text-white">{plan.name}</div>
+                    <div className="text-xs mb-2">{plan.description}</div>
+                    <div className="flex flex-wrap gap-3 text-xs">
+                      <span>Price: <span className="text-pink2">${plan.price}</span></span>
+                      <span>Workspaces: {plan.maxWorkspaces}</span>
+                      <span>Sheets: {plan.maxSheets}</span>
+                      <span>Members: {plan.maxMembers}</span>
+                      <span>Viewers: {plan.maxViewers}</span>
+                      <span>Tasks: {plan.maxTasks}</span>
+                    </div>
                   </div>
-                  <div className="mt-2 flex gap-2">
+                  <div className="mt-2 sm:mt-0 flex flex-col sm:flex-row gap-2">
                     <button
-                      className="px-3 py-1 rounded bg-yellow text-black text-xs font-bold hover:bg-yellow-400 transition-colors"
+                      className="w-full sm:w-auto px-3 py-1 rounded bg-yellow text-black text-xs font-bold hover:bg-yellow-400 transition-colors"
                       onClick={() => handleEdit(plan)}
                       disabled={formLoading}
                     >
                       Edit
                     </button>
                     <button
-                      className="px-3 py-1 rounded bg-selectRed1 text-white text-xs font-bold hover:bg-selectRed2 transition-colors"
+                      className="w-full sm:w-auto px-3 py-1 rounded bg-selectRed1 text-white text-xs font-bold hover:bg-selectRed2 transition-colors"
                       onClick={() => handleDelete(plan.id)}
                       disabled={formLoading}
                     >
@@ -202,8 +204,8 @@ const AdminPlans = () => {
             </ul>
           </div>
         </div>
-        {/* Create/Update Plan Form */}
-        <div className="bg-grayDash rounded-2xl px-8 py-8">
+        {/* Create/Update Plan Form (responsive padding) */}
+        <div className="bg-grayDash rounded-2xl px-6 md:px-8 py-6 md:py-8">
           <h3 className="text-lg text-white mb-4 font-radioCanada">
             {editId ? 'Update Plan' : 'Create New Plan'}
           </h3>
@@ -368,18 +370,6 @@ const AdminPlans = () => {
         message={toast.message}
         onClose={() => setToast(t => ({ ...t, isOpen: false }))}
       />
-
-
-
-
-
-
-
-
-
-
-
-
 
     </div>
   );
