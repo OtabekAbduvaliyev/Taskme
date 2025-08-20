@@ -2,6 +2,7 @@ import { createContext, useContext, useState } from "react";
 import axiosInstance from "../AxiosInctance/AxiosInctance";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import Toast from "../Components/Modals/Toast"; // import Toast
 
 const AuthContext = createContext();
@@ -11,10 +12,14 @@ const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
   const { sheetId } = useParams();
   const [toast, setToast] = useState({ isOpen: false, type: "success", message: "" });
+  const [switchingCompany, setSwitchingCompany] = useState(false);
+
+  const queryClient = useQueryClient();
 
   const showToast = (type, message) => {
     setToast({ isOpen: true, type, message });
-    setTimeout(() => setToast({ ...toast, isOpen: false }), 3000); // auto-close after 3s
+    // use functional update to avoid stale closure
+    setTimeout(() => setToast(t => ({ ...t, isOpen: false })), 3000); // auto-close after 3s
   };
 
   const register = async (credentials) => {
@@ -141,10 +146,13 @@ const AuthProvider = ({ children }) => {
       });
       console.log(response);
       setLoading(false);
+      // Return created workspace so caller can navigate to it
+      return response.data;
     } catch (error) {
       console.log(error);
       setLoading(false);
       showToast("error", `${error.response.data.message}`);
+      return null;
     }
   };
 
@@ -309,22 +317,52 @@ const fetchMembers = async () => {
     queryKey: ["members"],
     queryFn: fetchMembers,
   });
-  const changeCompany = async(credentials)=>{
+  const changeCompany = async (credentials, options = { deferToast: false }) => {
     const token = localStorage.getItem("token");
-    try{
-      setLoading(true)
+    try {
+      setLoading(true);
+      setSwitchingCompany(true);
       const response = await axiosInstance.patch("/user/change-role", credentials, {
-        headers:{
-          Authorization: `Bearer ${token}`
-        }
-    })
-    setLoading(false)
-    return response
-  }catch(err){
-    console.log(err);
-    
-  }
-}
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      setLoading(false);
+      setSwitchingCompany(false);
+
+      // Persist the selected role locally (so client can read immediately)
+      try {
+        const selectedRoleId = credentials.roleId || response?.data?.selectedRole;
+        if (selectedRoleId) localStorage.setItem("selectedRole", selectedRoleId);
+      } catch {}
+
+      // Invalidate related queries so workspace/sheet/member data will be refetched
+      try {
+        queryClient.invalidateQueries(["userinfo"]);
+        queryClient.invalidateQueries(["workspaces"]);
+        queryClient.invalidateQueries(["members"]);
+        queryClient.invalidateQueries(["sheets"]);
+        queryClient.invalidateQueries(["sheetlocation"]);
+        queryClient.invalidateQueries(["tasks"]);
+      } catch (e) {
+        console.warn("Failed to invalidate queries", e);
+      }
+
+      // Return structured result; caller can decide when to show toast (deferred)
+      return {
+        success: true,
+        message: "Company switched successfully",
+        data: response.data,
+      };
+    } catch (err) {
+      console.log(err);
+      setLoading(false);
+      setSwitchingCompany(false);
+      const message = err?.response?.data?.message || "Failed to change company";
+      return { success: false, message };
+    }
+  };
+
   // Update password function
   const updatePassword = async ({ oldPassword, newPassword }) => {
     setLoading(true);
@@ -369,7 +407,9 @@ const fetchMembers = async () => {
         dndOrdersTasks,
         members,
         changeCompany,
-        updatePassword
+        showToast,
+        updatePassword,
+        switchingCompany,
       }}
     >
       {children}
@@ -383,4 +423,3 @@ const fetchMembers = async () => {
   );
 };
 export { AuthContext, AuthProvider };
- 

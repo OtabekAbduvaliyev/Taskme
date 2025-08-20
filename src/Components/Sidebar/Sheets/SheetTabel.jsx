@@ -34,7 +34,10 @@ const SheetTabel = ({
   filteredTasks,
   setFilteredTasks,
   isCreatingTask,
+  taskRefetch, // <- new prop (optional) to call parent's refetch
 }) => {
+  // track which task ids are currently being deleted (shows UI & disables interactions)
+  const [deletingTaskIds, setDeletingTaskIds] = useState([]);
   const { sheetId } = useParams();
   const [isOpen, setIsOpen] = useState(false);
   const [column, setColumn] = useState({
@@ -345,12 +348,18 @@ const SheetTabel = ({
     }
   };
 
-  // Calculate pagination
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  // Server-side pagination: the parent provides filteredTasks already paginated.
+  // Use tasksToRender directly (no client-side slicing).
+  const tasksToRender = filteredTasks || [];
 
-  // Use filteredTasks as-is for pagination (do not sort here)
-  const paginatedTasks = filteredTasks.slice(indexOfFirstItem, indexOfLastItem);
+  // Always render tasks sorted by their numeric "order" property
+  const sortedTasksToRender = Array.isArray(tasksToRender)
+    ? [...tasksToRender].sort((a, b) => {
+        const ao = typeof a.order === "number" ? a.order : Number(a.order) || 0;
+        const bo = typeof b.order === "number" ? b.order : Number(b.order) || 0;
+        return ao - bo;
+      })
+    : [];
 
   // Modified function to handle task deletion without page reload
 
@@ -363,6 +372,9 @@ const SheetTabel = ({
   const confirmDeleteTasks = async () => {
     if (!tasksToDelete.length) return;
     try {
+      // mark as deleting immediately for UI feedback
+      setDeletingTaskIds(prev => [...new Set([...prev, ...tasksToDelete])]);
+
       // Delete each task by ID
       await Promise.all(
         tasksToDelete.map((taskId) =>
@@ -378,9 +390,13 @@ const SheetTabel = ({
         prev.filter((task) => !tasksToDelete.includes(task.id))
       );
       setSelectedTasks([]);
+      // attempt to refresh server-side pagination / data in parent if provided
+      try { if (typeof taskRefetch === "function") await taskRefetch(); } catch(_) {}
     } catch (err) {
       // Optionally handle error
     }
+    // clean up deleting state
+    setDeletingTaskIds(prev => prev.filter(id => !tasksToDelete.includes(id)));
     setIsDeleteTaskModalOpen(false);
     setTasksToDelete([]);
   };
@@ -486,16 +502,25 @@ const SheetTabel = ({
         message="Are you sure you want to delete this column? This action cannot be undone."
       />
       {/* Delete Confirmation Modal for tasks */}
-      <DeleteConfirmationModal
-        isOpen={isDeleteTaskModalOpen}
-        onClose={() => {
-          setIsDeleteTaskModalOpen(false);
-          setTasksToDelete([]);
-        }}
-        onDelete={confirmDeleteTasks}
-        title="Delete Task(s)"
-        message="Are you sure you want to delete the selected task(s)? This action cannot be undone."
-      />
+      {isDeleteTaskModalOpen && (
+        (() => {
+          const modalIsDeleting = tasksToDelete.some(id => deletingTaskIds.includes(id));
+          return (
+            <DeleteConfirmationModal
+              isOpen={isDeleteTaskModalOpen}
+              onClose={() => {
+                if (modalIsDeleting) return; // prevent closing while deleting
+                setIsDeleteTaskModalOpen(false);
+                setTasksToDelete([]);
+              }}
+              onDelete={confirmDeleteTasks}
+              title="Delete Task(s)"
+              message="Are you sure you want to delete the selected task(s)? This action cannot be undone."
+              isLoading={modalIsDeleting}
+            />
+          );
+        })()
+      )}
       <CustomModal
         isOpen={isOpen}
         handleToggleModal={handleToggleModal}
@@ -508,14 +533,19 @@ const SheetTabel = ({
       <DragDropContext onDragEnd={handleOnDragEnd}>
         <div className="w-full">
           {isMobile ? (
-            // Mobile: chat-like dark card/list view (single-line title+badges, actions on right)
+            // Mobile: chat-like dark card/F (single-line title+badges, actions on right)
             <div className="space-y-3 p-2">
-              {paginatedTasks.map((task) => (
+              {sortedTasksToRender.map((task) => (
                 <div
                   key={task.id}
                   className="bg-[#23272F] border border-[#2A2D36] rounded-lg p-3 flex items-start justify-between gap-3"
                 >
                   <div className="flex items-center gap-3 w-full">
+                    {/* Order badge */}
+                    <div className="flex items-center justify-center w-8 h-8 rounded bg-[#1F1F1F] text-sm font-semibold text-gray4 shrink-0">
+                      {typeof task.order !== "undefined" ? task.order : "-"}
+                    </div>
+
                     {/* checkbox styled like desktop for consistency */}
                     <label className="relative flex items-center cursor-pointer select-none shrink-0">
                       <input
@@ -604,6 +634,7 @@ const SheetTabel = ({
                             }}
                             className="text-red-500 p-1 rounded hover:text-red-400"
                             title="Delete"
+                            disabled={deletingTaskIds.includes(task.id)}
                           >
                             <MdDelete size={18} />
                           </button>
@@ -847,7 +878,7 @@ const SheetTabel = ({
                 <Droppable droppableId="droppable" direction="vertical" type="TASK">
                   {(provided) => (
                     <tbody ref={provided.innerRef} {...provided.droppableProps}>
-                      {paginatedTasks?.map((task, index) => (
+                      {sortedTasksToRender?.map((task, index) => (
                         <tr key={task.id} className="flex border-b border-black ">
                           <SheetTableItem
                             task={task}
@@ -865,6 +896,7 @@ const SheetTabel = ({
                               task.id === lastCreatedTaskIdRef.current &&
                               index === 0
                             }
+                            isDeleting={deletingTaskIds.includes(task.id)}
                           />
                         </tr>
                       ))}

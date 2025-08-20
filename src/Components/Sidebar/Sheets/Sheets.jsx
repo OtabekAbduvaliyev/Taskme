@@ -46,10 +46,26 @@ const Sheets = () => {
   const token = localStorage.getItem("token");
   const navigate = useNavigate();
   const { createTask } = useContext(AuthContext);
-  const [view, setView] = useState("table"); // 'table', 'list', 'calendar'
-
+  // Read URL search params first so we can initialize state from them
   const [searchParams, setSearchParams] = useSearchParams();
   const searchQuery = searchParams.get("search") || "";
+  const initialPage = parseInt(searchParams.get("page")) || 1;
+  const initialLimit = parseInt(searchParams.get("limit")) || 10;
+  const initialView = searchParams.get("view") || "table";
+
+  const [view, setView] = useState(initialView); // 'table', 'list', 'calendar'
+  const [currentPage, setCurrentPage] = useState(initialPage);
+  const [selectedTasks, setSelectedTasks] = useState([]);
+  const [itemsPerPage, setItemsPerPage] = useState(initialLimit);
+  const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
+
+  // pagination meta from server
+  const [pagination, setPagination] = useState({
+    page: initialPage,
+    pages: 1,
+    limit: initialLimit,
+    count: 0,
+  });
 
   const {
     isLoading,
@@ -72,8 +88,11 @@ const Sheets = () => {
 
   useEffect(() => {
     if (sheets?.sheets.length && !sheetId) {
-      // Navigate to the first sheet if sheetId is not provided
-      navigate(`/dashboard/workspace/${id}/${sheets.sheets[0].id}`);
+      // Navigate to the first sheet if sheetId is not provided, preserve query params
+      const qs = searchParams.toString();
+      navigate(
+        `/dashboard/workspace/${id}/${sheets.sheets[0].id}${qs ? `?${qs}` : ""}`
+      );
     }
   }, [sheets, sheetId, id, navigate]);
 
@@ -107,12 +126,17 @@ const Sheets = () => {
     if (sheets?.sheets) {
       const remainingSheets = sheets.sheets.filter(s => s.id !== sheetIdToDelete);
       if (remainingSheets.length > 0) {
-        navigate(`/dashboard/workspace/${id}/${remainingSheets[0].id}`);
+        const qs = searchParams.toString();
+        navigate(
+          `/dashboard/workspace/${id}/${remainingSheets[0].id}${qs ? `?${qs}` : ""}`
+        );
       } else {
-        navigate(`/dashboard/workspace/${id}`);
+        const qs = searchParams.toString();
+        navigate(`/dashboard/workspace/${id}${qs ? `?${qs}` : ""}`);
       }
     } else {
-      navigate(`/dashboard/workspace/${id}`);
+      const qs = searchParams.toString();
+      navigate(`/dashboard/workspace/${id}${qs ? `?${qs}` : ""}`);
     }
   };
 
@@ -156,27 +180,28 @@ const credentails = {
 const {
   isLoading: taskLoading,
   error: errorTask,
-  data,
+  data: taskResponse,
   refetch: taskRefetch,
 } = useQuery({
-  queryKey: ["tasks", sheetId, searchQuery],
+  queryKey: ["tasks", sheetId, searchQuery, currentPage, itemsPerPage],
   queryFn: async () => {
     const url = `task/${sheetId}`;
-    return await axiosInstance.get(url, {
+    const res = await axiosInstance.get(url, {
       params: {
-        search: searchQuery
+        search: searchQuery,
+        page: currentPage,
+        limit: itemsPerPage,
       },
       headers: {
         Authorization: `Bearer ${token}`,
       },
     });
+    return res.data; // expected shape: { tasks: [...], pagination: { page, pages, limit, count } }
   },
-  // ✅ will only call if sheetId exists AND searchQuery is not empty
-  enabled: !!sheetId 
+  enabled: !!sheetId,
 });
 
-console.log(data);
-
+// console.log(taskResponse);
 
   const [isCreatingTask, setIsCreatingTask] = useState(false);
 
@@ -203,27 +228,46 @@ console.log(data);
 
   const [filteredTasks, setFilteredTasks] = useState([]);
 
+  // use server-side pagination: update filteredTasks + pagination meta when response arrives
   useEffect(() => {
-    if (data?.data?.tasks) {
-      // Sort tasks so newest is first (by createdAt or id desc)
-      setFilteredTasks(
-        [...data.data.tasks].sort((a, b) => {
-          if (a.createdAt && b.createdAt) {
-            return new Date(b.createdAt) - new Date(a.createdAt);
-          }
-          // fallback: sort by id desc (assuming id is numeric or string with numbers)
-          if (!isNaN(Number(a.id)) && !isNaN(Number(b.id))) {
-            return Number(b.id) - Number(a.id);
-          }
-          return String(b.id).localeCompare(String(a.id));
-        })
-      );
+    if (taskResponse?.tasks) {
+      // use server ordering; directly set tasks returned by backend
+      setFilteredTasks(taskResponse.tasks);
+      if (taskResponse.pagination) {
+        setPagination({
+          page: taskResponse.pagination.page || 1,
+          pages: taskResponse.pagination.pages || 1,
+          limit: taskResponse.pagination.limit || itemsPerPage,
+          count: taskResponse.pagination.count || taskResponse.tasks.length,
+        });
+        // keep currentPage in sync with server (helps when links share page)
+        setCurrentPage(taskResponse.pagination.page || 1);
+      } else {
+        setPagination((p) => ({ ...p, count: taskResponse.tasks.length }));
+      }
+    } else {
+      // if no tasks returned, clear list
+      setFilteredTasks([]);
+      setPagination((p) => ({ ...p, count: 0, pages: 1 }));
     }
-  }, [data?.data?.tasks]);
+  }, [taskResponse, itemsPerPage]);
+
+  // Sync state -> URL so page/limit/view/search are shareable
+  useEffect(() => {
+    const params = {};
+    if (searchQuery) params.search = searchQuery;
+    if (currentPage && currentPage > 1) params.page = String(currentPage);
+    if (itemsPerPage && itemsPerPage !== 10) params.limit = String(itemsPerPage);
+    if (view && view !== "table") params.view = view;
+    // replace to avoid pushing many entries into history during quick interactions
+    setSearchParams(params, { replace: true });
+  }, [currentPage, itemsPerPage, view, searchQuery, setSearchParams]);
 
   const handleSearch = (e) => {
     const value = e.target.value;
+    // Update search param; currentPage reset to 1 (effect will sync URL)
     setSearchParams(value.trim() ? { search: value } : {});
+    setCurrentPage(1);
     // No need to filter client-side, just update the search param
   };
 
@@ -231,7 +275,11 @@ console.log(data);
 
   const handleSheetCreated = (newSheet) => {
     if (newSheet && newSheet.id) {
-      navigate(`/dashboard/workspace/${id}/${newSheet.id}`);
+      // preserve current query params when navigating to newly created sheet
+      const qs = searchParams.toString();
+      navigate(
+        `/dashboard/workspace/${id}/${newSheet.id}${qs ? `?${qs}` : ""}`
+      );
       setToast({
         isOpen: true,
         type: "success",
@@ -241,13 +289,12 @@ console.log(data);
   };
 
   // LIFTED STATE
-  const [selectedTasks, setSelectedTasks] = useState([]);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
+
 
   // Add state for task delete confirmation modal
   const [isDeleteTaskModalOpen, setIsDeleteTaskModalOpen] = useState(false);
+  // track deleting tasks for modal loading state
+  const [deletingTasks, setDeletingTasks] = useState([]);
 
   // LIFTED: handleMoveTask
   const handleMoveTask = () => {
@@ -263,17 +310,22 @@ console.log(data);
 
   // Confirm delete handler
   const confirmDeleteTasks = async () => {
-    for (const taskId of selectedTasks) {
-      await axiosInstance.delete(`/task/${taskId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+    if (!selectedTasks.length) return;
+    setDeletingTasks([...selectedTasks]); // show loading on modal
+    try {
+      await Promise.all(selectedTasks.map(id =>
+        axiosInstance.delete(`/task/${id}`, { headers: { Authorization: `Bearer ${token}` } })
+      ));
+      setSelectedTasks([]);
+      setIsDeleteTaskModalOpen(false);
+      setCurrentPage(1);
+      // refresh tasks list (parent query)
+      try { await taskRefetch(); } catch(_) { }
+    } catch (err) {
+      // optionally show an error toast
+    } finally {
+      setDeletingTasks([]);
     }
-    setSelectedTasks([]);
-    setIsDeleteTaskModalOpen(false);
-    setCurrentPage(1);
-    refetch();
   };
 
   // Add this toast state definition
@@ -339,10 +391,11 @@ console.log(data);
       {/* Delete Confirmation Modal for tasks */}
       <DeleteConfirmationModal
         isOpen={isDeleteTaskModalOpen}
-        onClose={() => setIsDeleteTaskModalOpen(false)}
+        onClose={() => { if (deletingTasks.length) return; setIsDeleteTaskModalOpen(false); }}
         onDelete={confirmDeleteTasks}
         title="Delete Task(s)"
         message="Are you sure you want to delete the selected task(s)? This action cannot be undone."
+        isLoading={deletingTasks.length > 0}
       />
       <UpgradePlanModal
         isOpen={upgradeModalOpen}
@@ -371,28 +424,31 @@ console.log(data);
                 editingSheetName={editingSheetName}
                 onSheetCreated={handleSheetCreated}
               />
-              {sheets?.sheets.map((sheet) => (
-                <Link
-                  key={sheet.id}
-                  to={`/dashboard/workspace/${id}/${sheet.id}`}
-                  className="sheet flex items-center gap-[6px] hover:bg-gray transition-all duration-1000 bg-grayDash rounded-[9px] pl-[10px] sm:pl-[12px] pr-[6px] py-[6px] inline-flex cursor-pointer text-[13px] sm:text-[14px]"
-                >
-                  <p>{!sheet.name == "" ? sheet.name : "Untitled"}</p>
-                  <Dropdown
-                    trigger={["click"]}
-                    menu={{ items: items(sheet.id, sheet.order, sheet.name) }}
+              {sheets?.sheets.map((sheet) => {
+                const qs = searchParams.toString();
+                return (
+                  <Link
+                    key={sheet.id}
+                    to={`/dashboard/workspace/${id}/${sheet.id}${qs ? `?${qs}` : ""}`}
+                    className="sheet flex items-center gap-[6px] hover:bg-gray transition-all duration-1000 bg-grayDash rounded-[9px] pl-[10px] sm:pl-[12px] pr-[6px] py-[6px] inline-flex cursor-pointer text-[13px] sm:text-[14px]"
                   >
-                    <a onClick={(e) => e.preventDefault()}>
-                      <Space>
-                        <BsThreeDotsVertical
-                          className={`cursor-pointer text-[10px] ${sheetId == sheet.id ? "block" : "hidden"
-                            }`}
-                        />
-                      </Space>
-                    </a>
-                  </Dropdown>
-                </Link>
-              ))}
+                    <p>{!sheet.name == "" ? sheet.name : "Untitled"}</p>
+                    <Dropdown
+                      trigger={["click"]}
+                      menu={{ items: items(sheet.id, sheet.order, sheet.name) }}
+                    >
+                      <a onClick={(e) => e.preventDefault()}>
+                        <Space>
+                          <BsThreeDotsVertical
+                            className={`cursor-pointer text-[10px] ${sheetId == sheet.id ? "block" : "hidden"
+                              }`}
+                          />
+                        </Space>
+                      </a>
+                    </Dropdown>
+                  </Link>
+                );
+              })}
               <div
                 className="sheet flex items-center gap-[6px] bg-grayDash rounded-[9px] hover:bg-gray transition-all duration-1000 px-[6px] py-[7px] cursor-pointer"
                 onClick={() => {
@@ -425,7 +481,7 @@ console.log(data);
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3, ease: "easeInOut" }}
                 className="sheetActions flex gap-[12px] sm:gap-[14px] items-center justify-between pb-[10px] sm:pb-[12px] 2xl:pb-[20px] sticky mt-[10px] sm:mt-[12px] 2xl:mt-[20px] top-[70px] flex-wrap"
-              // top-[70px] may need adjustment depending on tabs height
+              // top-[70px] may need adjustment depending on Pabs height
               >
                 <div className="flex gap-[12px] sm:gap-[18px] w-full sm:w-auto">
                   <div className="newProject">
@@ -476,7 +532,7 @@ console.log(data);
               </motion.div>
             )}
             {/* 3. Task View - scrollable middle */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 mt-[10px] mb-[20px] pb-[110px] rounded-[12px]">
+            <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 mt-[10px] mb-[110px] md:mb-[100px]  rounded-[12px]">
               <AnimatePresence mode="wait">
                 {isLoading ? (
                   <motion.div
@@ -546,6 +602,7 @@ console.log(data);
                         setIsMoveModalOpen={setIsMoveModalOpen}
                         handleDeleteTasks={handleDeleteTasks}
                         isCreatingTask={isCreatingTask}
+                        taskRefetch={taskRefetch} // pass refetch so child can refresh after deletes
                       />
                     )}
                     {view === "list" && (
@@ -603,21 +660,24 @@ console.log(data);
               </AnimatePresence>
             </div>
             {/* 4. Selecter - sticky/fixed bottom */}
-            {sheetId && (<div className="sticky bottom-0 left-0 w-full z-99 pt-2 pb-6">
-              <Selecter
-                selectedTasks={selectedTasks}
-                setItemsPerPage={setItemsPerPage}
-                setCurrentPage={setCurrentPage}
-                itemsPerPage={itemsPerPage}
-                currentPage={currentPage}
-                filteredTasks={filteredTasks}
-                setSelectedTasks={setSelectedTasks}
-                handleMoveTask={handleMoveTask}
-                setDeleteModalOpen={setDeleteModalOpen}
-                isHidden={false}
-                handleDeleteTasks={handleDeleteTasks}
-              />
-            </div>)}
+            {sheetId && (
+              <div className="sticky bottom-0 left-0 w-full z-99 pt-2 pb-6">
+                <Selecter
+                  selectedTasks={selectedTasks}
+                  setItemsPerPage={setItemsPerPage}
+                  setCurrentPage={setCurrentPage}
+                  itemsPerPage={itemsPerPage}
+                  currentPage={currentPage}
+                  filteredTasks={filteredTasks}
+                  setSelectedTasks={setSelectedTasks}
+                  handleMoveTask={handleMoveTask}
+                  setDeleteModalOpen={setDeleteModalOpen}
+                  isHidden={false}
+                  handleDeleteTasks={handleDeleteTasks}
+                  pagination={pagination}
+                />
+              </div>
+            )}
             {/* MoveTaskModal rendered at parent level */}
             {isMoveModalOpen && selectedTasks.length === 1 && (
               <MoveTaskModal
@@ -644,8 +704,4 @@ console.log(data);
     </>
   );
 };
-
-
-
 export default Sheets;
-                            

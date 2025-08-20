@@ -6,7 +6,7 @@ import { IoIosArrowForward } from 'react-icons/io';
 import { IoClose } from 'react-icons/io5';
 import SelecterMobile from './SelecterMobile';
 
-const Selecter = ({ selectedTasks, setItemsPerPage, setCurrentPage,itemsPerPage,currentPage,filteredTasks,setSelectedTasks,handleMoveTask,setDeleteModalOpen,isHidden, handleDeleteTasks }) => {
+const Selecter = ({ selectedTasks, setItemsPerPage, setCurrentPage,itemsPerPage,currentPage,filteredTasks,setSelectedTasks,handleMoveTask,setDeleteModalOpen,isHidden, handleDeleteTasks, pagination }) => {
   // detect mobile (simple)
   const [isMobile, setIsMobile] = useState(typeof window !== "undefined" ? window.innerWidth <= 768 : false);
   useEffect(() => {
@@ -14,6 +14,10 @@ const Selecter = ({ selectedTasks, setItemsPerPage, setCurrentPage,itemsPerPage,
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
+
+  // derive pagination values (prefer server-provided metadata)
+  const totalPages = pagination?.pages ?? Math.max(1, Math.ceil((filteredTasks?.length || 0) / itemsPerPage));
+  const serverPage = pagination?.page ?? currentPage;
 
   return (
     <div className={`${isHidden ? "block" : "block"} `}>
@@ -32,6 +36,7 @@ const Selecter = ({ selectedTasks, setItemsPerPage, setCurrentPage,itemsPerPage,
             setDeleteModalOpen={setDeleteModalOpen}
             isHidden={isHidden}
             handleDeleteTasks={handleDeleteTasks}
+            pagination={pagination}
           />
         ) : (
           // Desktop UI: unchanged markup (keeps original behavior)
@@ -45,7 +50,7 @@ const Selecter = ({ selectedTasks, setItemsPerPage, setCurrentPage,itemsPerPage,
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
             transition={{ duration: 0.2, ease: "easeInOut" }}
-            className=" flex mt-[90px] gap-[10px]"
+            className=" flex  gap-[10px]"
           >
             {selectedTasks?.length > 0 && (
               <div className="w-1/2">
@@ -109,15 +114,14 @@ const Selecter = ({ selectedTasks, setItemsPerPage, setCurrentPage,itemsPerPage,
                 </div>
                 <div className="pages flex items-center gap-[12px]">
                   <p className="text-white2">
-                    Page {currentPage} of{" "}
-                    {Math.ceil(filteredTasks?.length / itemsPerPage)}
+                    Page {serverPage} of {totalPages}
                   </p>
                   <div>
                     <div className="flex items-center gap-[6px]">
                       <div
                         className="prev bg-grayDash rounded-[14px] flex items-center justify-center cursor-pointer p-[6px] hover:bg-gray"
                         onClick={() =>
-                          currentPage > 1 && setCurrentPage((prev) => prev - 1)
+                          serverPage > 1 && setCurrentPage((prev) => Math.max(1, prev - 1))
                         }
                       >
                         <IoIosArrowForward className="text-white2 rotate-180 text-[20px]" />
@@ -125,9 +129,7 @@ const Selecter = ({ selectedTasks, setItemsPerPage, setCurrentPage,itemsPerPage,
                       <div
                         className="next bg-grayDash rounded-[14px] flex items-center justify-center cursor-pointer p-[6px] hover:bg-gray"
                         onClick={() =>
-                          currentPage <
-                            Math.ceil(filteredTasks?.length / itemsPerPage) &&
-                          setCurrentPage((prev) => prev + 1)
+                          serverPage < totalPages && setCurrentPage((prev) => Math.min(totalPages, prev + 1))
                         }
                       >
                         <IoIosArrowForward className="text-pink2 text-[20px]" />

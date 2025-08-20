@@ -16,8 +16,11 @@ const SelecterMobile = ({
   setDeleteModalOpen,
   isHidden,
   handleDeleteTasks,
+  pagination,
 }) => {
-  const totalPages = Math.max(1, Math.ceil((filteredTasks?.length || 0) / itemsPerPage));
+  // prefer server-side pagination metadata when available
+  const totalPages = pagination?.pages ?? Math.max(1, Math.ceil((filteredTasks?.length || 0) / itemsPerPage));
+  const serverPage = pagination?.page ?? currentPage;
 
   return (
     // fixed container uses same horizontal padding as task list (p-2 in SheetTabel)
@@ -78,19 +81,21 @@ const SelecterMobile = ({
 
           <div className="flex items-center gap-2 w-1/2 justify-end">
             <button
-              onClick={() => currentPage > 1 && setCurrentPage((p) => p - 1)}
+              onClick={() => serverPage > 1 && setCurrentPage(serverPage - 1)}
               className="p-2 bg-[#23272F] rounded-md text-white"
               aria-label="Previous"
+              disabled={serverPage <= 1}
             >
               <IoIosArrowForward className="rotate-180" />
             </button>
             <div className="text-white text-sm px-2">
-              {currentPage}/{totalPages}
+              {serverPage}/{totalPages}
             </div>
             <button
-              onClick={() => currentPage < totalPages && setCurrentPage((p) => p + 1)}
+              onClick={() => serverPage < totalPages && setCurrentPage(serverPage + 1)}
               className="p-2 bg-pink2 rounded-md text-white"
               aria-label="Next"
+              disabled={serverPage >= totalPages}
             >
               <IoIosArrowForward />
             </button>

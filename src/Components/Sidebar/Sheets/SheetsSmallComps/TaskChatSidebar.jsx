@@ -45,6 +45,11 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
     // upload endpoint (use axiosInstance for uploads)
     const UPLOAD_ENDPOINT = "task/upload";
 
+    // max allowed file size (100 MB)
+    const MAX_FILE_SIZE = 100 * 1024 * 1024;
+    // helper to format max size for messages
+    const formatMaxSize = () => "100 MB";
+
     // helper to build public URL
     const getFileUrl = (file) => {
         const rawPath = file?.path || file?.url || "";
@@ -98,6 +103,24 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
         fetchFiles();
     }, [isOpen, task?.id]);
 
+    // Listen for uploads from other components (SheetTableItem) and merge returned files
+    useEffect(() => {
+        const handler = (e) => {
+            if (!e?.detail) return;
+            const { taskId, files: returned } = e.detail || {};
+            if (!taskId || taskId !== task?.id) return;
+            if (!Array.isArray(returned) || returned.length === 0) return;
+            // prepend returned files while avoiding duplicate ids
+            setFiles((prev) => {
+                const existingIds = new Set(prev.map(f => f.id));
+                const newFiles = returned.filter(f => f && f.id && !existingIds.has(f.id));
+                return newFiles.length ? [...newFiles, ...prev] : prev;
+            });
+        };
+        window.addEventListener("taskFilesUpdated", handler);
+        return () => window.removeEventListener("taskFilesUpdated", handler);
+    }, [task?.id]);
+
     // Open modal and set selected members to current task members
     const handleOpenMemberModal = () => {
         setSelectedMemberIds((task?.members || []).map((m) => m.id));
@@ -143,6 +166,12 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
             const updatedMembers =
                 companyMembers?.filter((m) => selectedMemberIds.includes(m.id)) || [];
             setMembers(updatedMembers);
+            // notify other components (SheetTableItem etc.) about member update
+            try {
+                window.dispatchEvent(new CustomEvent("taskMembersUpdated", {
+                    detail: { taskId: task.id, members: updatedMembers }
+                }));
+            } catch (e) { /* ignore */ }
             setShowMemberModal(false);
         } catch {
             // Optionally show error
@@ -261,6 +290,8 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
 
     // Upload a single file and update queue progress
     const uploadSingle = async (item) => {
+        // do not attempt to upload items that already have an error (e.g. oversized)
+        if (item.status === "error") return;
         setUploadQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, status: "uploading", progress: 0 } : q)));
         const form = new FormData();
         form.append("files", item.file);
@@ -291,7 +322,7 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
             setUploadQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, status: "done", progress: 100 } : q)));
         } catch (err) {
             console.error("Upload failed for", item.file.name, err);
-            setUploadQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, status: "error" } : q)));
+            setUploadQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, status: "error", error: err?.message || "Upload failed" } : q)));
         } finally {
             // release preview URL after a short delay so UI shows thumbnail briefly
             setTimeout(() => {
@@ -307,13 +338,16 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
 
         const items = selected.map((file, idx) => {
             const id = `${Date.now()}_${idx}`;
+            const isTooLarge = file.size > MAX_FILE_SIZE;
             return {
                 id,
                 file,
                 preview: /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(file.name) ? URL.createObjectURL(file) : null,
                 size: file.size,
                 progress: 0,
-                status: "queued",
+                status: isTooLarge ? "error" : "queued",
+                // add readable error for oversized files
+                error: isTooLarge ? `File exceeds ${formatMaxSize()}` : undefined,
             };
         });
 
@@ -324,7 +358,8 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
 
         // upload sequentially (or concurrently if you prefer)
         for (const it of items) {
-            // ensure task still exists
+            // skip items already marked as error (oversized etc.)
+            if (it.status === "error") continue;
             if (!task?.id) break;
             /* eslint-disable no-await-in-loop */
             await uploadSingle(it);
@@ -674,10 +709,15 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                             >
                                 <div className="flex-1 text-center md:text-left">
                                     <div className="text-white font-semibold">Drag & drop files here</div>
-                                    <div className="text-gray4 text-sm mt-1">or click to select files. Supports images, docs and more.</div>
+                                    <div className="text-gray4 text-sm mt-1">
+                                        or click to select files. Supports images, docs and more.
+                                        <span className="block text-xs text-gray4 mt-1">Max file size: <span className="text-white font-medium">{formatMaxSize()}</span></span>
+                                    </div>
                                 </div>
                                 <label className="inline-flex items-center gap-2 cursor-pointer">
-                                    <div className="px-3 py-2 bg-pink2 text-white rounded-md font-medium">Select files</div>
+                                    <div className="px-3 py-2 bg-pink2 text-white rounded-md font-medium">
+                                        Select files <span className="text-xs ml-2 opacity-90">({formatMaxSize()} max)</span>
+                                    </div>
                                     <input
                                         type="file"
                                         multiple
@@ -706,7 +746,11 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                                                         <div className="text-xs text-gray4 whitespace-nowrap">{q.progress}%</div>
                                                         <div className="text-xs text-gray4">· {formatBytes(q.size)}</div>
                                                     </div>
-                                                    {q.status === "error" && <div className="text-xs text-red-500 mt-1">Upload failed</div>}
+                                                    {q.status === "error" && (
+                                                        <div className="text-xs text-red-500 mt-1">
+                                                            {q.error || "Upload failed"}
+                                                        </div>
+                                                    )}
                                                 </div>
                                                 <div className="flex items-center gap-2 ml-2">
                                                     {q.status === "uploading" ? (

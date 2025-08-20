@@ -8,7 +8,8 @@ const DeleteConfirmationModal = ({
   onClose,
   onDelete,
   title = "Delete Item",
-  message = "Are you sure you want to delete this item? This action cannot be undone."
+  message = "Are you sure you want to delete this item? This action cannot be undone.",
+  isLoading = false, // new prop to indicate delete in progress
 }) => {
   
   return (
@@ -46,9 +47,9 @@ const DeleteConfirmationModal = ({
               background: 'rgba(0,0,0,0.5)',
               backdropFilter: 'blur(4px)',
               zIndex: 0,
-              cursor: 'pointer'
+              cursor: isLoading ? 'default' : 'pointer'
             }}
-            onClick={onClose}
+            onClick={() => { if (!isLoading) onClose(); }}
           />
 
           {/* Modal */}
@@ -72,10 +73,12 @@ const DeleteConfirmationModal = ({
             <div className="relative p-6">
               {/* Close button */}
               <motion.button
-                whileHover={{ scale: 1.1, rotate: 90 }}
-                whileTap={{ scale: 0.9 }}
-                onClick={onClose}
+                whileHover={{ scale: isLoading ? 1 : 1.05 }}
+                whileTap={{ scale: isLoading ? 1 : 0.98 }}
+                onClick={() => { if (!isLoading) onClose(); }}
                 className="absolute top-4 right-4 text-white  transition-colors"
+                aria-disabled={isLoading}
+                style={{ opacity: isLoading ? 0.5 : 1, pointerEvents: isLoading ? 'none' : 'auto' }}
               >
                 <FiX size={24} />
               </motion.button>
@@ -97,29 +100,31 @@ const DeleteConfirmationModal = ({
               {/* Buttons */}
               <div className="flex gap-3 pt-2">
                 <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={onClose}
+                  whileHover={{ scale: isLoading ? 1 : 1.02 }}
+                  whileTap={{ scale: isLoading ? 1 : 0.98 }}
+                  onClick={() => { if (!isLoading) onClose(); }}
                   className="flex-1 bg-[#2A2A2A] text-[#777C9D] rounded-xl py-3.5 font-medium transition-all duration-300 hover:bg-[#3A3A3A] hover:text-white"
+                  disabled={isLoading}
                 >
                   Cancel
                 </motion.button>
                 <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={onDelete}
+                  whileHover={{ scale: isLoading ? 1 : 1.02 }}
+                  whileTap={{ scale: isLoading ? 1 : 0.98 }}
+                  onClick={() => { if (!isLoading) onDelete(); }}
                   className="flex-1 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl py-3.5 font-medium transition-all duration-300 hover:shadow-lg hover:shadow-red-500/20 relative overflow-hidden group"
+                  disabled={isLoading}
                 >
-                  <span className="relative z-10">Delete</span>
+                  <span className="relative z-10">{isLoading ? "Deleting..." : "Delete"}</span>
                   <div className="absolute inset-0 bg-gradient-to-r from-red-500/0 via-white/20 to-red-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
                 </motion.button>
-              </div>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  )
-}
-
-export default DeleteConfirmationModal
+               </div>
+             </div>
+           </motion.div>
+         </motion.div>
+       )}
+     </AnimatePresence>
+   )
+ }
+ 
+ export default DeleteConfirmationModal

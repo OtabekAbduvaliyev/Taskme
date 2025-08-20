@@ -10,6 +10,7 @@ import { useRef, useEffect, useState, useContext } from "react";
 import testMemImg from "../../../../assets/default-avatar-icon-of-social-media-user-vector.jpg"
 import { IoMdChatbubbles } from "react-icons/io";
 import axiosInstance from "../../../../AxiosInctance/AxiosInctance";
+import axios from "axios";
 import { IoClose } from "react-icons/io5";
 import InviteMemberModal from "../../../Modals/InviteMemberModal";
 import { SketchPicker } from "react-color";
@@ -31,6 +32,7 @@ const SheetTableItem = ({
   stickyFirstThreeColumns,
   onChatIconClick,
   autoFocus, // <-- new prop
+  isDeleting = false, // new prop to indicate deletion in progress
 }) => {
   const handleInputChange = (taskKey, e) => {
     const key = String(taskKey).toLowerCase();
@@ -130,6 +132,196 @@ const SheetTableItem = ({
   const [isDeletingFile, setIsDeletingFile] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  // --- NEW: local mirror of task.files so UI updates immediately ---
+  const [localFiles, setLocalFiles] = useState(Array.isArray(task?.files) ? [...task.files] : []);
+
+  useEffect(() => {
+    setLocalFiles(Array.isArray(task?.files) ? [...task.files] : []);
+  }, [task?.files]);
+
+  // --- NEW: local mirror of task.members so UI updates immediately ---
+  const [localMembers, setLocalMembers] = useState(Array.isArray(task?.members) ? [...task.members] : []);
+
+  useEffect(() => {
+    setLocalMembers(Array.isArray(task?.members) ? [...task.members] : []);
+  }, [task?.members]);
+
+  // Listen for member updates dispatched by other components
+  useEffect(() => {
+    const handler = (e) => {
+      if (!e?.detail) return;
+      const { taskId, members } = e.detail || {};
+      if (!taskId || taskId !== task?.id) return;
+      if (!Array.isArray(members)) return;
+      setLocalMembers(members);
+    };
+    window.addEventListener("taskMembersUpdated", handler);
+    return () => window.removeEventListener("taskMembersUpdated", handler);
+  }, [task?.id]);
+
+  // Ensure selectedFileIndex stays valid when localFiles changes
+  useEffect(() => {
+    if (selectedFileIndex >= (localFiles.length || 0)) {
+      setSelectedFileIndex(Math.max(0, (localFiles.length || 1) - 1));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localFiles]);
+
+  // Upload helpers (use same upload API as TaskChatSidebar)
+  const UPLOAD_ENDPOINT = "task/upload";
+  const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
+  const formatMaxSize = () => "100 MB";
+
+  // utility: format bytes (used in upload UI)
+  const formatBytes = (bytes) => {
+    if (!bytes && bytes !== 0) return "0 B";
+    const sizes = ["B", "KB", "MB", "GB", "TB"];
+    const i = bytes === 0 ? 0 : Math.floor(Math.log(bytes) / Math.log(1024));
+    return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${sizes[i] || "B"}`;
+  };
+
+  // Upload queue: {id, file, preview, size, progress, status, error}
+  const [uploadQueue, setUploadQueue] = useState([]);
+  const [modalTab, setModalTab] = useState("preview"); // "preview" | "upload"
+
+  // Cancel single upload (remove from queue and cancel request if running)
+  const cancelUpload = (id) => {
+    setUploadQueue((prev) => {
+      const item = prev.find((q) => q.id === id);
+      if (!item) return prev;
+      // cancel in-progress request
+      if (item.cancelSource && typeof item.cancelSource.cancel === "function") {
+        try { item.cancelSource.cancel("Upload cancelled by user"); } catch (_) { }
+      }
+      // revoke preview if present
+      if (item.preview) {
+        try { URL.revokeObjectURL(item.preview); } catch (_) { }
+      }
+      return prev.filter((q) => q.id !== id);
+    });
+  };
+
+  const uploadSingle = async (item) => {
+    // skip if already error/invalid or task missing
+    if (!task?.id || item.status === "error") return;
+    // create cancel token for this request
+    const source = axios.CancelToken ? axios.CancelToken.source() : null;
+    setUploadQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, status: "uploading", progress: 0, cancelSource: source } : q)));
+    const form = new FormData();
+    form.append("files", item.file);
+    form.append("taskId", task.id);
+
+    try {
+      const token = localStorage.getItem("token");
+      const res = await axiosInstance.post(UPLOAD_ENDPOINT, form, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data",
+        },
+        cancelToken: source?.token,
+        onUploadProgress: (progressEvent) => {
+          if (!progressEvent.total) return;
+          const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          setUploadQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, progress: percent } : q)));
+        },
+      });
+
+            // get server-returned files (if API returns them) and notify parent/sidebar via event
+const returned = Array.isArray(res?.data?.data)
+        ? res.data.data
+        : Array.isArray(res?.data?.files)
+          ? res.data.files
+          : Array.isArray(res?.data)
+            ? res.data
+            : [];
+
+      if (typeof window !== "undefined" && Array.isArray(returned) && returned.length > 0) {
+        try {
+          window.dispatchEvent(
+            new CustomEvent("taskFilesUpdated", {
+              detail: {
+                taskId: task?.id || null,
+                files: returned
+              }
+            })
+          );
+        } catch (e) {
+          // ignore if CustomEvent not supported
+        }
+      }
+
+    // --- NEW: merge returned files into localFiles for immediate UI update ---
+    if (Array.isArray(returned) && returned.length) {
+      setLocalFiles(prev => {
+        const existingIds = new Set(prev.map(f => f.id));
+        const newFiles = returned.filter(f => f && f.id && !existingIds.has(f.id));
+        return newFiles.length ? [...newFiles, ...prev] : prev;
+      });
+    }
+
+      // mark done and notify parent to refresh files
+      setUploadQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, status: "done", progress: 100, cancelSource: undefined } : q)));
+      if (typeof onEdit === "function") onEdit();
+    } catch (err) {
+      // If cancelled, we already handled removal in cancelUpload; otherwise mark as error
+      if (axios.isCancel && axios.isCancel(err)) {
+        // do nothing (cancelUpload already removed it)
+      } else {
+        setUploadQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, status: "error", error: err?.message || "Upload failed", cancelSource: undefined } : q)));
+      }
+    } finally {
+      setTimeout(() => {
+        setUploadQueue((prev) => prev.filter((q) => q.id !== item.id || q.status !== "done"));
+      }, 1200);
+    }
+  };
+
+  const handleFileChange = async (e) => {
+    const selected = Array.from(e.target.files || []);
+    if (!selected.length || !task?.id) return;
+    const items = selected.map((file, idx) => {
+      const id = `${Date.now()}_${idx}`;
+      const isTooLarge = file.size > MAX_FILE_SIZE;
+      return {
+        id,
+        file,
+        preview: /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(file.name) ? URL.createObjectURL(file) : null,
+        size: file.size,
+        progress: 0,
+        status: isTooLarge ? "error" : "queued",
+        error: isTooLarge ? `File exceeds ${formatMaxSize()}` : undefined,
+      };
+    });
+    setUploadQueue((prev) => [...items, ...prev]);
+    e.target.value = "";
+    for (const it of items) {
+      if (it.status === "error") continue;
+      if (!task?.id) break;
+      /* eslint-disable no-await-in-loop */
+      await uploadSingle(it);
+      /* eslint-enable no-await-in-loop */
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    if (!e.dataTransfer) return;
+    const files = Array.from(e.dataTransfer.files || []);
+    const fakeEvent = { target: { files } };
+    handleFileChange(fakeEvent);
+  };
+  const handleDragOver = (e) => e.preventDefault();
+
+  // cleanup previews on unmount
+  useEffect(() => {
+    return () => {
+      uploadQueue.forEach((q) => {
+        if (q.preview) URL.revokeObjectURL(q.preview);
+      });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Open modal and set selected members to current task members
   const handleOpenMemberModal = () => {
     setSelectedMemberIds((task?.members || []).map((m) => m.id));
@@ -156,7 +348,15 @@ const SheetTableItem = ({
         { members: selectedMemberIds },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      // Optionally update UI or refetch tasks here
+      // --- NEW: update localMembers immediately and notify other components ---
+      const updatedMembers = (companyMembers || []).filter(m => selectedMemberIds.includes(m.id));
+      setLocalMembers(updatedMembers);
+      try {
+        window.dispatchEvent(new CustomEvent("taskMembersUpdated", {
+          detail: { taskId: task.id, members: updatedMembers }
+        }));
+      } catch (e) { /* ignore */ }
+
       setShowMemberModal(false);
     } catch {
       // Optionally show error
@@ -249,11 +449,11 @@ const SheetTableItem = ({
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (typeof onEdit === "function") onEdit();
-    } catch {}
+    } catch { }
     setSavingOptionId(null);
   };
   console.log(user);
-  
+
   // Delete option
   const handleDeleteOption = async (id) => {
     setDeletingOptionId(id);
@@ -268,7 +468,7 @@ const SheetTableItem = ({
         options: prev.options.filter(opt => opt.id !== id),
       }));
       if (typeof onEdit === "function") onEdit();
-    } catch {}
+    } catch { }
     setDeletingOptionId(null);
   };
 
@@ -282,9 +482,12 @@ const SheetTableItem = ({
       { value: "In Progress", label: "In Progress", bg: "#BF7E1C" },
       { value: "Done", label: "Done", bg: "#0EC359" },
     ],
+    priority:[
+
+    ]
     // add other keys here if you want mapped selects, e.g. stage, progress...
   };
-  
+
   useEffect(() => {
     const fetchUserInfo = async () => {
       try {
@@ -293,10 +496,39 @@ const SheetTableItem = ({
           headers: { Authorization: `Bearer ${token}` }
         });
         setUserInfo(res.data);
-      } catch {}
+      } catch { }
     };
     fetchUserInfo();
   }, []);
+
+  // --- NEW: ensure SELECT / priority fields get the first option when empty (run once per task) ---
+  const initializedDefaultsRef = useRef(new Set());
+  useEffect(() => {
+    if (!task?.id || typeof onChange !== "function" || initializedDefaultsRef.current.has(task.id)) return;
+
+    const updates = [];
+    (columns || []).forEach((column) => {
+      const colKey = String(column.key || "").toLowerCase();
+      const colType = String(column.type || "").toUpperCase();
+
+      // SELECT columns -> use first option.name if present
+      if (colType === "SELECT") {
+        const opts = column?.selects?.[0]?.options;
+        if (Array.isArray(opts) && opts.length > 0) {
+          const firstVal = opts[0].name ?? opts[0].value ?? "";
+          if (firstVal && !task[colKey]) updates.push({ key: colKey, value: firstVal });
+        }
+      }
+
+      
+    });
+
+    if (updates.length) {
+      updates.forEach(u => onChange(task.id, u.key, u.value));
+    }
+    initializedDefaultsRef.current.add(task.id);
+    // intentionally run when task id or columns change
+  }, [task?.id, columns, onChange]);
 
   // Ref for first input
   const firstInputRef = useRef(null);
@@ -337,12 +569,12 @@ const SheetTableItem = ({
       console.error("Download failed:", err);
     }
   };
-  
+
   const confirmDeleteFile = (file) => {
     setFileToDelete(file);
     setShowDeleteConfirm(true);
   };
-  
+
   const handleDeleteFile = async () => {
     if (!fileToDelete) return;
     setIsDeletingFile(true);
@@ -352,9 +584,9 @@ const SheetTableItem = ({
         data: { fileIds: [fileToDelete.id] },
         headers: { Authorization: `Bearer ${token}` },
       });
-      // notify parent to refresh if onEdit available
+      // --- NEW: remove deleted file from localFiles immediately ---
+      setLocalFiles(prev => prev.filter(f => f.id !== fileToDelete.id));
       if (typeof onEdit === "function") onEdit();
-      // close modal and reset selection
       setShowDeleteConfirm(false);
       setFileToDelete(null);
       setShowFileModal(false);
@@ -374,8 +606,9 @@ const SheetTableItem = ({
         data: { fileIds: [file.id] },
         headers: { Authorization: `Bearer ${token}` },
       });
+      // --- NEW: update localFiles immediately ---
+      setLocalFiles(prev => prev.filter(f => f.id !== file.id));
       if (typeof onEdit === "function") onEdit();
-      // ensure modal selection resets if needed
       setSelectedFileIndex(0);
     } catch (e) {
       console.error("Error deleting file:", e);
@@ -397,7 +630,8 @@ const SheetTableItem = ({
             onChange={(value) =>
               handleInputChange(lowerKey, { target: { value } })
             }
-            defaultValue={task[lowerKey] || "Select value"}
+            /* show first option when task has no value */
+            defaultValue={task[lowerKey] || (options[0]?.name || "Select value")}
             className="w-full"
             style={{ width: "100%" }}
             dropdownRender={menu => (
@@ -649,9 +883,9 @@ const SheetTableItem = ({
       // Always expect/store as ["YYYY-MM-DD", "YYYY-MM-DD"]
       const rangeValue = Array.isArray(task[lowerKey]) && task[lowerKey].length === 2
         ? [
-            task[lowerKey][0] ? dayjs(task[lowerKey][0]) : null,
-            task[lowerKey][1] ? dayjs(task[lowerKey][1]) : null,
-          ]
+          task[lowerKey][0] ? dayjs(task[lowerKey][0]) : null,
+          task[lowerKey][1] ? dayjs(task[lowerKey][1]) : null,
+        ]
         : [null, null];
       const placeholder = ["Start due date", "End due date"];
       return (
@@ -710,7 +944,7 @@ const SheetTableItem = ({
         </div>
       );
     }
-console.log(lowerKey);
+    console.log(lowerKey);
 
     // Link input
     if (["links"].includes(lowerKey)) {
@@ -729,7 +963,7 @@ console.log(lowerKey);
       return (
         <div className="flex items-center w-full">
           <Input
-            className="bg-grayDash border-none focus:bg-gray3 hover:bg-grayDash text-white text-[18px] underline placeholder-white"
+            className="bg-grayDash border-none focus:bg-gray3 hover:bg-grayDash text-white text-[18px]  placeholder-gray"
             value={value}
             onChange={handleLinkChange}
             type="text"
@@ -756,55 +990,10 @@ console.log(lowerKey);
     }
 
     // Priority select
-    if (lowerKey === "priority") {
-      const priorityOptions = [
-        { value: "Low", label: "Low", bg: "#0EC359" },      // selectGreen1
-        { value: "Medium", label: "Medium", bg: "#BF7E1C" }, // yellow
-        { value: "High", label: "High", bg: "#DC5091" },     // selectRed1
-      ];
-      return (
-        <Select
-          suffixIcon={null}
-          onChange={(value) =>
-            handleInputChange(lowerKey, { target: { value } })
-          }
-          defaultValue={task[lowerKey] || "Select priority"}
-          className="w-full"
-          style={{ width: "100%" }}
-        >
-          {priorityOptions.map((option) => (
-            <Select.Option key={option.value} value={option.value}>
-              <span
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  borderRadius: "6px",
-                  padding: "4px 10px",
-                  fontWeight: 500,
-                  color: "#fff",
-                  background: option.bg,
-                }}
-              >
-                <span
-                  style={{
-                    display: "inline-block",
-                    width: 10,
-                    height: 10,
-                    borderRadius: "50%",
-                    background: "#111",
-                    marginRight: 8,
-                  }}
-                />
-                {option.label}
-              </span>
-            </Select.Option>
-          ))}
-        </Select>
-      );
-    }
+
 
     // Generic mapped selects (status, etc.) — render similarly to priority
-    if (KEY_SELECT_OPTIONS[lowerKey]) {
+    if (KEY_SELECT_OPTIONS[lowerKey] || lowerKey === "priority") {
       const options = KEY_SELECT_OPTIONS[lowerKey];
       return (
         <Select
@@ -812,7 +1001,7 @@ console.log(lowerKey);
           onChange={(value) =>
             handleInputChange(lowerKey, { target: { value } })
           }
-          defaultValue={task[lowerKey] || `Select ${lowerKey}`}
+          defaultValue={task[lowerKey] || (options[0]?.value || `Select ${lowerKey}`)}
           className="w-full"
           style={{ width: "100%" }}
         >
@@ -839,7 +1028,7 @@ console.log(lowerKey);
 
     // Member avatars
     if (lowerKey === "members") {
-      const taskMembers = Array.isArray(task.members) ? task.members : [];
+      const taskMembers = Array.isArray(localMembers) ? localMembers : [];
       const noCompanyMembers = !companyMembers || companyMembers.length === 0;
       return (
         <>
@@ -928,18 +1117,16 @@ console.log(lowerKey);
                   <div className="flex justify-end gap-2">
                     {/* Disable Cancel and Save when no company members exist */}
                     <button
-                      className={`px-4 py-2 rounded bg-gray3 text-white transition ${
-                        noCompanyMembers ? "opacity-50 cursor-not-allowed" : "hover:bg-gray4"
-                      }`}
+                      className={`px-4 py-2 rounded bg-gray3 text-white transition ${noCompanyMembers ? "opacity-50 cursor-not-allowed" : "hover:bg-gray4"
+                        }`}
                       onClick={() => { if (!noCompanyMembers) setShowMemberModal(false); }}
                       disabled={noCompanyMembers}
                     >
                       Cancel
                     </button>
                     <button
-                      className={`px-4 py-2 rounded bg-pink2 text-white font-semibold transition ${
-                        (isSaving || noCompanyMembers) ? "opacity-50 cursor-not-allowed" : "hover:shadow"
-                      }`}
+                      className={`px-4 py-2 rounded bg-pink2 text-white font-semibold transition ${(isSaving || noCompanyMembers) ? "opacity-50 cursor-not-allowed" : "hover:shadow"
+                        }`}
                       onClick={handleSaveMembers}
                       disabled={isSaving || noCompanyMembers}
                     >
@@ -972,13 +1159,23 @@ console.log(lowerKey);
 
   // Helper to render small file preview/icon
   const renderFilesCell = () => {
-    const filesArr = Array.isArray(task.files) ? task.files : [];
+    // use localFiles (immediate UI) instead of task.files
+    const filesArr = Array.isArray(localFiles) ? localFiles : [];
     if (!filesArr.length) {
+      // make the empty cell clickable to open the modal (upload tab)
       return (
-        <div className="flex items-center gap-2 text-gray4">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setModalTab("upload");
+            setShowFileModal(true);
+          }}
+          className="flex items-center gap-2 text-gray4 px-2 py-1 rounded hover:bg-[#2A2D36]"
+          title="No files — upload"
+        >
           <FaRegFileAlt className="w-4 h-4" />
-          <span className="text-xs">No files</span>
-        </div>
+          <span className="text-xs">No files — upload</span>
+        </button>
       );
     }
 
@@ -1054,11 +1251,11 @@ console.log(lowerKey);
     <Draggable draggableId={task.id.toString()} index={index}>
       {(provided) => (
         <tr
-          className="task flex text-white border-[black] font-radioCanada"
-          ref={provided.innerRef}
-          {...provided.draggableProps}
-          {...provided.dragHandleProps}
-        >
+          className={`task flex text-white border-[black] font-radioCanada ${isDeleting ? "opacity-60 pointer-events-none" : ""}`}
+           ref={provided.innerRef}
+           {...provided.draggableProps}
+           {...provided.dragHandleProps}
+         >
           {/* Sticky checkbox cell */}
           <td className="w-[48px] py-[16px] px-[11px] flex items-center justify-center border-r border-r-[black] sticky left-0 bg-grayDash z-20">
             <label className="relative flex items-center cursor-pointer select-none w-[20px] h-[20px]">
@@ -1107,28 +1304,29 @@ console.log(lowerKey);
               <IoMdChatbubbles className="text-gray4 w-[30px] h-[30px]" />
             </div>
           </td>
-          {columns?.map(
-            (column, idx) =>
-              column.show && (
-                <td
-                  key={idx}
-                  className={`w-[180px] flex items-center justify-between py-[16px] border-r border-r-[black] px-[11px]${
-                    stickyFirstThreeColumns && idx === 0
-                      ? " sticky left-[96px] z-10 bg-grayDash"
-                      : ""
-                  }`}
-                  onClick={() => onEdit && onEdit()}
-                >
-                  {renderField(column.key, column.type, column, idx)}
-                </td>
-              )
-          )}
+          {/* Order cell - shows numeric order for the task */}
+
+           {columns?.map(
+             (column, idx) =>
+               column.show && (
+                 <td
+                   key={idx}
+                   className={`w-[180px] flex items-center justify-between py-[16px] border-r border-r-[black] px-[11px]${stickyFirstThreeColumns && idx === 0
+                       ? " sticky left-[96px] z-10 bg-grayDash"
+                       : ""
+                     }`}
+                   onClick={() => onEdit && onEdit()}
+                 >
+                   {renderField(column.key, column.type, column, idx)}
+                 </td>
+               )
+           )}
 
           {/* Files default column (before Last update) */}
           <td className="w-[140px] sm:w-[160px] md:w-[180px] flex items-center py-[16px] border-r border-r-[black] px-[11px] overflow-visible">
             {renderFilesCell()}
           </td>
-          
+
           {/* New default column: Last update (avatar, name/email, timestamp) */}
           <td className="w-[180px] flex items-center gap-3 py-[16px] border-r border-r-[black] px-[11px]">
             {(() => {
@@ -1150,7 +1348,12 @@ console.log(lowerKey);
                   />
                   <div className="flex-1 ml-3 min-w-0">
                     <div className="text-white text-sm truncate">{displayName}</div>
-                    <div className="text-gray4 text-xs">{formatted}</div>
+                    {/* show deleting marker when applicable */}
+                    {isDeleting ? (
+                      <div className="text-yellow-300 text-xs">Deleting...</div>
+                    ) : (
+                      <div className="text-gray4 text-xs">{formatted}</div>
+                    )}
                   </div>
                 </div>
               );
@@ -1165,7 +1368,23 @@ console.log(lowerKey);
               <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black bg-opacity-50 p-4">
                 <div className="bg-grayDash rounded-lg shadow-lg w-full max-w-[900px] overflow-hidden">
                   <div className="flex justify-between items-center p-4 border-b border-[#2A2D36]">
-                    <div className="text-white font-semibold">Files</div>
+                    <div className="flex items-center gap-3">
+                      <div className="text-white font-semibold">Files</div>
+                      <div className="flex items-center bg-[#1f1f1f] rounded overflow-hidden text-sm">
+                        <button
+                          className={`px-3 py-1 ${modalTab === "preview" ? "bg-pink2 text-white" : "text-gray4"}`}
+                          onClick={() => setModalTab("preview")}
+                        >
+                          Preview
+                        </button>
+                        <button
+                          className={`px-3 py-1 ${modalTab === "upload" ? "bg-pink2 text-white" : "text-gray4"}`}
+                          onClick={() => setModalTab("upload")}
+                        >
+                          Upload
+                        </button>
+                      </div>
+                    </div>
                     <div className="flex items-center gap-2">
                       <button
                         className="text-gray4 p-2 rounded hover:bg-[#2A2D36]"
@@ -1177,41 +1396,104 @@ console.log(lowerKey);
                   </div>
 
                   <div className="flex flex-col md:flex-row gap-4 p-4">
-                    {/* Preview pane */}
-                    <div className="flex-shrink-0 w-full md:w-2/3 flex items-center justify-center bg-[#23272F] border border-[#2A2D36] rounded p-3 overflow-auto">
-                      {Array.isArray(task.files) && task.files.length > 0 ? (
-                        (() => {
-                          const f = task.files[selectedFileIndex] || task.files[0];
-                          const isImage = /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(f.path || "");
-                          return isImage ? (
-                            <img
-                              src={getFileUrl(f)}
-                              alt={f.path?.split?.("/").pop?.() || "preview"}
-                              className="max-h-[70vh] max-w-full object-contain"
-                            />
-                          ) : (
-                            <div className="flex flex-col items-center text-gray4">
-                              <FaRegFileAlt className="w-20 h-20 mb-2" />
-                              <div className="text-sm">{f.path?.split?.("/").pop?.() || f.id}</div>
-                            </div>
-                          );
-                        })()
-                      ) : (
-                        <div className="flex flex-col items-center text-gray4">
-                          <FaRegFileAlt className="w-12 h-12 mb-2" />
-                          <div className="text-sm">No files</div>
+                    {/* Left pane: preview OR upload UI based on tab */}
+                    {modalTab === "preview" ? (
+                      <div className="flex-shrink-0 w-full md:w-2/3 flex items-center justify-center bg-[#23272F] border border-[#2A2D36] rounded p-3 overflow-auto">
+                        {Array.isArray(localFiles) && localFiles.length > 0 ? (
+                          (() => {
+                            const f = localFiles[selectedFileIndex] || localFiles[0];
+                            const isImage = /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(f.path || "");
+                            return isImage ? (
+                              <img
+                                src={getFileUrl(f)}
+                                alt={f.path?.split?.("/").pop?.() || "preview"}
+                                className="max-h-[70vh] max-w-full object-contain"
+                              />
+                            ) : (
+                              <div className="flex flex-col items-center text-gray4">
+                                <FaRegFileAlt className="w-20 h-20 mb-2" />
+                                <div className="text-sm">{f.path?.split?.("/").pop() || f.id}</div>
+                              </div>
+                            );
+                          })()
+                        ) : (
+                          <div className="flex flex-col items-center text-gray4">
+                            <FaRegFileAlt className="w-12 h-12 mb-2" />
+                            <div className="text-sm">No files</div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div
+                        className="flex-shrink-0 w-full md:w-2/3 bg-[#23272F] border border-[#2A2D36] rounded p-3"
+                        onDrop={handleDrop}
+                        onDragOver={handleDragOver}
+                      >
+                        <div className="border-2 border-dashed border-[#2A2D36] rounded-lg p-4 mb-4 flex flex-col items-center gap-3">
+                          <div className="text-white font-semibold">Drag & drop files here</div>
+                          <div className="text-gray4 text-sm">or click to select files. Max: <span className="text-white">{formatMaxSize()}</span></div>
+                          <label className="inline-flex items-center gap-2 cursor-pointer mt-2">
+                            <div className="px-3 py-2 bg-pink2 text-white rounded-md font-medium">Select files</div>
+                            <input type="file" multiple onChange={handleFileChange} className="hidden" />
+                          </label>
                         </div>
-                      )}
-                    </div>
 
-                    {/* Files list / actions */}
+                        {/* Upload queue */}
+                        {uploadQueue.length > 0 && (
+                          <div className="mb-2">
+                            <div className="text-white font-semibold mb-2">Upload queue</div>
+                            <div className="flex flex-col gap-2">
+                              {uploadQueue.map((q) => (
+                                <div key={q.id} className="flex items-center gap-3 bg-[#1F1F1F] rounded-lg px-3 py-2">
+                                  <div className="w-12 h-12 rounded overflow-hidden bg-[#111] flex items-center justify-center border border-[#2A2D36]">
+                                    {q.preview ? <img src={q.preview} alt={q.file.name} className="w-full h-full object-cover" /> : <FaRegFileAlt className="text-pink2 w-6 h-6" />}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-white truncate">{q.file.name}</div>
+                                    <div className="flex items-center gap-3 mt-1">
+                                      <div className="h-2 bg-[#2A2D36] rounded-md flex-1 overflow-hidden">
+                                        <div style={{ width: `${q.progress}%` }} className={`h-2 bg-pink2 rounded-md transition-all`} />
+                                      </div>
+                                      <div className="text-xs text-gray4 whitespace-nowrap">{q.progress}%</div>
+                                      <div className="text-xs text-gray4">· {formatBytes(q.size)}</div>
+                                    </div>
+                                    {q.status === "error" && (
+                                      <div className="text-xs text-red-500 mt-1">
+                                        {q.error || "Upload failed"}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2 ml-2">
+                                    {q.status === "uploading" ? (
+                                      <>
+                                        <button className="text-gray4 px-2 py-1 rounded" title="Uploading" disabled>…</button>
+                                        <button onClick={() => cancelUpload(q.id)} className="text-red-500 px-2 py-1 rounded" title="Cancel">Cancel</button>
+                                      </>
+                                    ) : q.status === "queued" ? (
+                                      <button onClick={() => cancelUpload(q.id)} className="text-red-500 px-2 py-1 rounded" title="Cancel">Cancel</button>
+                                    ) : q.status === "error" ? (
+                                      <>
+                                        <button onClick={() => uploadSingle(q)} className="text-yellow-400 px-2 py-1 rounded" title="Retry">Retry</button>
+                                        <button onClick={() => cancelUpload(q.id)} className="text-red-500 px-2 py-1 rounded" title="Remove">Remove</button>
+                                      </>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Right pane: files list / actions (use localFiles) */}
                     <div className="flex-1 flex flex-col gap-3">
                       <div className="flex-1 overflow-y-auto max-h-[60vh] p-1">
                         <div className="grid grid-cols-3 gap-2">
-                          {Array.isArray(task.files) && task.files.length > 0 ? (
-                            task.files.map((f, idx) => {
+                          {Array.isArray(localFiles) && localFiles.length > 0 ? (
+                            localFiles.map((f, idx) => {
                               const url = getFileUrl(f);
-                              const filename = f.path?.split?.("/").pop?.() || f.id;
+                              const filename = f.path?.split?.("/").pop() || f.id;
                               const isImage = /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(f.path || "");
                               return (
                                 // make the thumbnail a group so delete button appears on hover
@@ -1220,6 +1502,7 @@ console.log(lowerKey);
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setSelectedFileIndex(idx);
+                                      setModalTab("preview");
                                     }}
                                     className={`w-full h-24 rounded border overflow-hidden bg-[#23272F] flex items-center justify-center transition ${selectedFileIndex === idx ? "border-pink2 ring-2 ring-pink2" : "border-[#2A2D36]"}`}
                                   >
@@ -1233,11 +1516,10 @@ console.log(lowerKey);
                                     )}
                                   </button>
 
-                                  {/* small circular delete X (hidden until hover) */}
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      deleteFileDirect(f); // direct delete from modal
+                                      deleteFileDirect(f);
                                     }}
                                     title="Delete file"
                                     aria-label={`Delete ${filename}`}
@@ -1256,10 +1538,10 @@ console.log(lowerKey);
                       </div>
 
                       <div className="flex gap-2">
-                        {Array.isArray(task.files) && task.files[selectedFileIndex] && (
+                        {Array.isArray(localFiles) && localFiles[selectedFileIndex] && (
                           <>
                             <button
-                              onClick={() => downloadFile(task.files[selectedFileIndex])}
+                              onClick={() => downloadFile(localFiles[selectedFileIndex])}
                               className="px-4 py-2 rounded bg-pink2 text-white font-semibold"
                             >
                               Download
@@ -1284,12 +1566,14 @@ console.log(lowerKey);
           <DeleteConfirmationModal
             isOpen={showDeleteConfirm}
             onClose={() => {
+              if (isDeletingFile) return; // prevent closing while deleting
               setShowDeleteConfirm(false);
               setFileToDelete(null);
             }}
             onDelete={handleDeleteFile}
             title="Delete file"
             message="Are you sure you want to delete this file? This action cannot be undone."
+            isLoading={isDeletingFile}
           />
         </tr>
       )}

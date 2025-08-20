@@ -39,19 +39,18 @@ const Navbar = ({ onToggleSidebar, sidebarOpen }) => {
    // use left instead of right to anchor under the bell reliably on narrow screens
   const [dropdownStyle, setDropdownStyle] = useState({ top: 0, left: 16, width: 380 });
   const [profileDropdownStyle, setProfileDropdownStyle] = useState({ top: 0, left: 16, width: 300 });
-  const [companyColors, setCompanyColors] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("companyColors")) || {};
-    } catch {
-      return {};
-    }
-  });
-  const colorPalette = ["#FF5A8A", "#B296F5", "#0EC359", "#DC5091"];
   const [selectedNotificationId, setSelectedNotificationId] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedRole, setSelectedRole] = useState(null);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
-  const { changeCompany } = useContext(AuthContext);
+  const { changeCompany, showToast } = useContext(AuthContext);
+
+  // NEW: state to show full-screen company-switching overlay
+  const [companySwitching, setCompanySwitching] = useState(false);
+
+  // helper: promise delay
+  const delay = (ms) => new Promise((res) => setTimeout(res, ms));
+
   const fetchNotifications = async () => {
     try {
       const response = await axiosInstance.get("/notification", {
@@ -266,14 +265,6 @@ const Navbar = ({ onToggleSidebar, sidebarOpen }) => {
     navigate("/login");
   };
 
-  const saveCompanyColor = (companyId, color) => {
-    const next = { ...companyColors, [companyId]: color };
-    setCompanyColors(next);
-    try { localStorage.setItem("companyColors", JSON.stringify(next)); } catch {}
-    // close profile dropdown after selecting a color
-    setShowProfileDropdown(false);
-  };
-
   return (
     <div className="relative py-4 lg:py-6 xl:py-[30px] flex flex-col lg:flex-row items-start lg:items-center justify-between mx-4 lg:mx-6 xl:mx-[35px] border-b border-grayDash font-radioCanada">
       {/* Breadcrumb + Mobile Controls */}
@@ -456,11 +447,8 @@ const Navbar = ({ onToggleSidebar, sidebarOpen }) => {
                   {user?.firstName ? user.firstName : user.email}
                 </p>
                 <div className="flex gap-[3px]">
-                  <span
-                    className="text-[10px] lg:text-[11px] font-semibold"
-                    // default to second color in palette (purple) when no saved color
-                    style={{ color: companyColors[selectedRole?.company?.id] || colorPalette[1] }}
-                  >
+                  {/* company name uses same color as logout button */}
+                  <span className="text-[10px] lg:text-[11px] font-semibold text-pink2">
                     {selectedRole?.company?.name}
                   </span>
                   <p className="text-[10px] lg:text-[11px] text-white">
@@ -503,23 +491,7 @@ const Navbar = ({ onToggleSidebar, sidebarOpen }) => {
                       <div className="p-4 border-b border-[#2A2A2A]">
                         <div className="flex items-center justify-between mb-3">
                           <p className="text-white font-semibold">Your Companies</p>
-                          {/* color palette for the currently selected company */}
-                          {selectedRole?.company?.id && (
-                            <div className="flex items-center gap-2">
-                              {colorPalette.map((c) => (
-                                <button
-                                  key={c}
-                                  aria-label="Pick color"
-                                  onClick={() => saveCompanyColor(selectedRole.company.id, c)}
-                                  className="w-6 h-6 rounded-full border-2 border-transparent hover:border-white transition"
-                                  style={{
-                                    background: c,
-                                    boxShadow: companyColors[selectedRole.company.id] === c ? "0 0 0 2px rgba(255,255,255,0.08)" : undefined,
-                                  }}
-                                />
-                              ))}
-                            </div>
-                          )}
+                          {/* removed color-picker — company color is fixed */}
                         </div>
                         <ul className="space-y-2">
                           {(user?.roles || [])
@@ -528,23 +500,66 @@ const Navbar = ({ onToggleSidebar, sidebarOpen }) => {
                               <li key={role.company.id} className="flex items-center gap-2">
                                 <button
                                   className={`w-full text-left px-3 py-2 rounded-lg text-[#C4E1FE] hover:bg-white/5 transition flex items-center justify-between`}
-                                  onClick={() => {
-                                    changeCompany({ roleId: role.id });
+                                  onClick={async () => {
+                                    // Show overlay and immediately reflect selection in UI
+                                    setCompanySwitching(true);
                                     setSelectedRole(role);
                                     setShowProfileDropdown(false);
-                                  }}
-                                >
+ 
+                                    try {
+                                     // Start changeCompany and also start a 6s minimum timer
+                                    // tell changeCompany not to show toast immediately; we will show it after minWait
+                                    const changePromise = changeCompany({ roleId: role.id }, { deferToast: true });
+                                    const minWaitPromise = delay(5000);
+ 
+                                    // wait for change to complete
+                                    const changeResult = await changePromise;
+ 
+                                    // fetch workspaces after change; wait for both fetch and min wait
+                                    const token = localStorage.getItem("token");
+                                    const wsReq = axiosInstance.get("/workspace", {
+                                      headers: { Authorization: `Bearer ${token}` },
+                                    });
+ 
+                                    const [wsRes] = await Promise.all([wsReq, minWaitPromise]);
+ 
+                                    const wsList = Array.isArray(wsRes.data) ? wsRes.data : (wsRes.data?.workspaces || []);
+                                    const firstWs = wsList && wsList.length ? wsList[0] : null;
+                                    if (firstWs && (firstWs.id || firstWs._id)) {
+                                      navigate(`/dashboard/workspace/${firstWs.id || firstWs._id}`, { replace: true });
+                                    } else {
+                                      navigate("/dashboard", { replace: true });
+                                    }
+ 
+                                    // After the minimum wait AND change completion, show toast to user
+                                    if (changeResult && changeResult.success) {
+                                      showToast("success", changeResult.message || "Company switched successfully");
+                                    } else {
+                                      showToast("error", changeResult?.message || "Failed to change company");
+                                    }
+                                   } catch (err) {
+                                     // fallback: ensure at least 6s elapsed before hiding and navigate to dashboard
+                                     try { await delay(6000); } catch {}
+                                     navigate("/dashboard", { replace: true });
+                                   } finally {
+                                     setCompanySwitching(false);
+                                   }
+                                 }}
+                               >
                                   <div className="flex items-center gap-3">
-                                    <span
-                                      className="w-3 h-3 rounded-full"
-                                      // default to second color in palette (purple) when no saved color
-                                      style={{ background: companyColors[role.company.id] || colorPalette[1] }}
-                                    />
+                                    {/* fixed pink dot to match logout button color */}
+                                    <span className="w-3 h-3 rounded-full bg-pink2" />
                                     <div>
                                       <div className="font-medium text-white">{role.company.name}</div>
                                       <div className="text-xs text-[#777C9D]">({role.company.plan?.name || "Free plan"})</div>
                                     </div>
                                   </div>
+                                  {/* selected company indicator */}
+                                  {selectedRole?.id === role.id ? (
+                                    <div className="ml-2 flex items-center text-pink2">
+                                      <FiCheck />
+                                    </div>
+                                  ) : null}
                                 </button>
                                 {/* quick color picker per company */}
 
@@ -565,7 +580,7 @@ const Navbar = ({ onToggleSidebar, sidebarOpen }) => {
                 </AnimatePresence>,
                 (typeof document !== "undefined" && document.getElementById("root")) || document.body
               )}
-           </div>
+            </div>
         </div>
       </div>
 
@@ -578,8 +593,28 @@ const Navbar = ({ onToggleSidebar, sidebarOpen }) => {
         isOpen={showDetailModal}
         onClose={() => setShowDetailModal(false)}
       />
+      {/* NEW: Full-screen company-switching overlay (rooted on html via document.documentElement) */}
+      {companySwitching &&
+        (typeof document !== "undefined"
+          ? ReactDOM.createPortal(
+              <div
+                role="status"
+                aria-live="polite"
+                className="fixed inset-0 z-[12000] flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm"
+                // ensure overlay sits on top of everything
+              >
+                <div className="flex flex-col items-center gap-4">
+                  <div className="w-12 h-12 rounded-full border-4 border-t-transparent border-white animate-spin" />
+                  <div className="text-white text-sm">Switching company… please wait</div>
+                </div>
+              </div>,
+              // mount on <html> element (rooted on html as requested) if available, otherwise body
+              (typeof document !== "undefined" && document.documentElement) || document.body
+            )
+          : null)}
     </div>
   );
 };
 
 export default Navbar;
+

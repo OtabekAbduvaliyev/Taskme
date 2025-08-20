@@ -51,7 +51,7 @@ const CreateSheetFormModal = ({
         {
           title: "Select the status",
           color: "black",
-          options: [{ name: "Pending", color: "#C6C8D6" },{ name: "In progress", color: "#B296F5" },{ name: "Done", color: "#0EC359" },{ name: "Rejected", color: "#801949" }],
+          options: [{ name: "Pending", color: "#C6C8D6" }, { name: "In progress", color: "#B296F5" }, { name: "Done", color: "#0EC359" }, { name: "Rejected", color: "#801949" }],
         },
       ],
     },
@@ -60,6 +60,13 @@ const CreateSheetFormModal = ({
       type: ColumnType.SELECT,
       show: true,
       isDefault: true,
+      selects: [
+        {
+          title: "Select the Priority",
+          color: "black",
+          options: [{ name: "Low", color: "#C6C8D6" }, { name: "Medium", color: "#B296F5" }, { name: "High", color: "#0EC359" }],
+        },
+      ],
     },
     {
       name: "Links",
@@ -203,9 +210,9 @@ const CreateSheetFormModal = ({
         { name: sheet.name, order: editingSheetOrder },
         {
           headers:
-            {
-              Authorization: ` Bearer ${token}`,
-            },
+          {
+            Authorization: ` Bearer ${token}`,
+          },
         }
       );
 

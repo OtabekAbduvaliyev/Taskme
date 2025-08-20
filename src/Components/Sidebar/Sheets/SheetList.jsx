@@ -13,6 +13,7 @@ const SheetList = ({
   onMoveTask,
   loading,
 }) => {
+  const [isDeleting, setIsDeleting] = useState(false);
   const [selectedTasks, setSelectedTasks] = useState([]);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
@@ -40,11 +41,19 @@ const SheetList = ({
   };
 
   // Bulk actions
-  const handleDeleteSelectedTasks = () => {
-    if (onDeleteTask) {
-      selectedTasks.forEach((taskId) => onDeleteTask(taskId));
+  const handleDeleteSelectedTasks = async () => {
+    if (!onDeleteTask || selectedTasks.length === 0) return;
+    setIsDeleting(true);
+    try {
+      // support onDeleteTask returning a promise or not
+      await Promise.all(
+        selectedTasks.map((id) => Promise.resolve(onDeleteTask(id)))
+      );
       setSelectedTasks([]);
+    } catch (_) {
+      // ignore per-task errors here, parent can handle
     }
+    setIsDeleting(false);
   };
   const handleMoveTask = () => {
     if (selectedTasks.length === 1 && onMoveTask) {
@@ -271,6 +280,10 @@ const SheetList = ({
           </div>
         </div>
       </div>
+      {/* basic deleting overlay or indicator */}
+      {isDeleting && (
+        <div className="mt-2 text-xs text-yellow-300">Deleting selected tasks...</div>
+      )}
     </div>
   );
 };
