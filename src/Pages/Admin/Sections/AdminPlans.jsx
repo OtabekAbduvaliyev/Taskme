@@ -125,31 +125,44 @@ const AdminPlans = () => {
 
   // Handle delete button (open modal)
   const handleDelete = id => {
-    setDeleteModal({ isOpen: true, planId: id });
+    // normalize id (support _id or id)
+    const normalizedId = id || null;
+    console.debug('Open delete modal for plan id:', normalizedId);
+    setDeleteModal({ isOpen: true, planId: normalizedId });
   };
 
   // Confirm delete
   const confirmDelete = async () => {
     const id = deleteModal.planId;
-    console.log('Deleting plan id:', id); // Debug
-    if (!id) return;
+    console.debug('Attempting to delete plan id:', id);
+    if (!id) {
+      console.warn('No plan id available to delete');
+      setDeleteModal({ isOpen: false, planId: null });
+      return;
+    }
+
     setFormLoading(true);
     const token = localStorage.getItem('token');
     try {
-      await axiosInstance.delete(`/plan/${id}`, {
+      const res = await axiosInstance.delete(`/plan/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      console.debug('Delete response:', res?.data || res);
       setToast({ isOpen: true, type: 'success', message: 'Plan deleted successfully.' });
+      // Reset editing form if deleted plan was being edited
       if (editId === id) {
         setEditId(null);
         setForm(initialForm);
       }
       await fetchPlans();
-    } catch {
-      setToast({ isOpen: true, type: 'error', message: 'Failed to delete plan.' });
+    } catch (err) {
+      console.error('Error deleting plan:', err);
+      const msg = err?.response?.data?.message || err?.message || 'Failed to delete plan.';
+      setToast({ isOpen: true, type: 'error', message: msg });
+    } finally {
+      setFormLoading(false);
+      setDeleteModal({ isOpen: false, planId: null });
     }
-    setFormLoading(false);
-    setDeleteModal({ isOpen: false, planId: null });
   };
 
   // Handle cancel edit
@@ -193,7 +206,7 @@ const AdminPlans = () => {
                     </button>
                     <button
                       className="w-full sm:w-auto px-3 py-1 rounded bg-selectRed1 text-white text-xs font-bold hover:bg-selectRed2 transition-colors"
-                      onClick={() => handleDelete(plan.id)}
+                      onClick={() => handleDelete(plan.id || plan._id)}
                       disabled={formLoading}
                     >
                       Delete
@@ -313,7 +326,7 @@ const AdminPlans = () => {
                 />
               </div>
             </div>
-            <div>
+            {/* <div>
               <label className="block text-white2 mb-1">Is Customized</label>
               <input
                 type="checkbox"
@@ -324,8 +337,8 @@ const AdminPlans = () => {
                 disabled={formLoading}
               />
               <span className="text-white2">Check if this is a customized plan</span>
-            </div>
-            <div>
+            </div> */}
+            {/* <div>
               <label className="block text-white2 mb-1">Customized Plan For (comma separated)</label>
               <input
                 type="text"
@@ -336,7 +349,7 @@ const AdminPlans = () => {
                 disabled={formLoading}
                 placeholder="companyId1, companyId2, ..."
               />
-            </div>
+            </div> */}
             <div className="flex gap-2">
               <button
                 type="submit"
@@ -363,6 +376,15 @@ const AdminPlans = () => {
           </form>
         </div>
       </div>
+      {/* Delete Confirmation Modal (was missing) */}
+      <DeleteConfirmationModal
+        isOpen={deleteModal.isOpen}
+        onClose={() => setDeleteModal({ isOpen: false, planId: null })}
+        onDelete={confirmDelete}
+        title="Delete Plan"
+        message="Are you sure you want to delete this plan? This action cannot be undone."
+        isLoading={formLoading}
+      />
       {/* Toast */}
       <Toast
         isOpen={toast.isOpen}

@@ -11,7 +11,7 @@ const AdminSidebar = ({ children, isOpen = false, onClose = () => {} }) => {
   const overlay = (
     <div
       role="presentation"
-      className={`fixed inset-0 bg-black/50 z-[10000] transition-opacity duration-200 md:hidden ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+      className={`fixed inset-0 bg-black/50 z-[40] transition-opacity duration-200 md:hidden ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
       onClick={onClose}
       onTouchMove={(e) => { if (isOpen) e.preventDefault(); }}
       onWheel={(e) => { if (isOpen) e.preventDefault(); }}
@@ -29,7 +29,7 @@ const AdminSidebar = ({ children, isOpen = false, onClose = () => {} }) => {
         w-64 md:w-[240px]
         min-h-screen
         flex flex-col items-center
-        fixed top-0 left-0 h-screen z-[11000] border-r border-gray4
+        fixed top-0 left-0 h-screen z-[50] border-r border-gray4
         transform transition-transform duration-200
         ${isOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'}
         md:translate-x-0 md:pointer-events-auto

@@ -169,13 +169,8 @@ const SheetTabel = ({
 
   useEffect(() => {
     if (tasks) {
-      const sortedTasks = [...tasks].sort((a, b) => {
-        if (typeof a.order === "number" && typeof b.order === "number") {
-          return a.order - b.order;
-        }
-        return 0;
-      });
-      setTaskList(sortedTasks);
+      // Keep the original order as received from the server (do not sort by `order`)
+      setTaskList(Array.isArray(tasks) ? [...tasks] : []);
     }
     if (sheets?.columns) {
       setColumnOrder(sheets.columns.map((_, index) => index));
@@ -352,14 +347,8 @@ const SheetTabel = ({
   // Use tasksToRender directly (no client-side slicing).
   const tasksToRender = filteredTasks || [];
 
-  // Always render tasks sorted by their numeric "order" property
-  const sortedTasksToRender = Array.isArray(tasksToRender)
-    ? [...tasksToRender].sort((a, b) => {
-        const ao = typeof a.order === "number" ? a.order : Number(a.order) || 0;
-        const bo = typeof b.order === "number" ? b.order : Number(b.order) || 0;
-        return ao - bo;
-      })
-    : [];
+  // Do not sort tasks here — render in the order provided by the server/parent
+  const sortedTasksToRender = Array.isArray(tasksToRender) ? [...tasksToRender] : [];
 
   // Modified function to handle task deletion without page reload
 

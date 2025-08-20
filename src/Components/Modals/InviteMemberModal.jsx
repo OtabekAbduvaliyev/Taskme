@@ -18,20 +18,29 @@ const InviteMemberModal = ({ isOpen, onClose }) => {
   const [showAdminTooltip, setShowAdminTooltip] = useState(false);
   const token = localStorage.getItem("token");
 
-  // Fetch available workspaces
+  // Fetch available workspaces (exposed so it can be refetched)
+  const fetchWorkspaces = async () => {
+    try {
+      const response = await axiosInstance.get("/workspace", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setAvailableWorkspaces(response.data);
+    } catch (error) {
+      console.error("Error fetching workspaces:", error);
+    }
+  };
+
+  // initial fetch on mount / token change
   useEffect(() => {
-    const fetchWorkspaces = async () => {
-      try {
-        const response = await axiosInstance.get("/workspace", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setAvailableWorkspaces(response.data);
-      } catch (error) {
-        console.error("Error fetching workspaces:", error);
-      }
-    };
     fetchWorkspaces();
-  }, []);
+  }, [token]);
+
+  // Refetch workspaces when modal is open and user selects "OWN" view
+  useEffect(() => {
+    if (isOpen && view === "OWN") {
+      fetchWorkspaces();
+    }
+  }, [isOpen, view]);
 
   // Fetch current user email
   useEffect(() => {
@@ -129,7 +138,8 @@ const InviteMemberModal = ({ isOpen, onClose }) => {
           workspaces,
         },
         {
-          headers: {
+          headers:
+          {
             Authorization: `Bearer ${token}`,
           },
         }

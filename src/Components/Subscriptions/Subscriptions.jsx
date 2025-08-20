@@ -195,6 +195,10 @@ const Subscriptions = () => {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successPayload, setSuccessPayload] = useState(null);
 
+  // NEW: processing/error state for free-plan flow
+  const [processingFree, setProcessingFree] = useState(false);
+  const [freeError, setFreeError] = useState(null);
+
   useEffect(() => {
     const fetchPlans = async () => {
       setLoading(true);
@@ -220,6 +224,43 @@ const Subscriptions = () => {
     `${plan.maxMembers} Member${plan.maxMembers > 1 ? "s" : ""}`,
     `${plan.maxViewers} Viewer${plan.maxViewers > 1 ? "s" : ""}`,
   ];
+
+  // New: handle free plan click by creating payment intent then showing success modal
+  const handleFreePlan = async (plan) => {
+    setFreeError(null);
+    setProcessingFree(true);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch("https://eventify.preview.uz/api/v1/payment/inline", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ planId: plan.id })
+      });
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => null);
+        throw new Error(txt || "Failed to create subscription for free plan");
+      }
+
+      const data = await res.json();
+
+      // Persist chosen plan briefly for other screens if needed
+      try { sessionStorage.setItem("currentPlan", JSON.stringify(plan)); } catch {}
+
+      // Show success modal similarly to paid flow. Backend may already activate the plan on create for free plans.
+      setMessage("Subscription activated!");
+      setSuccessPayload({ plan, paymentIntent: data || null });
+      setShowSuccessModal(true);
+    } catch (err) {
+      setFreeError(err?.message || "Unexpected error");
+      setMessage("");
+    } finally {
+      setProcessingFree(false);
+    }
+  };
 
   return (
     <Elements stripe={stripePromise}>
@@ -274,9 +315,10 @@ const Subscriptions = () => {
                     {plan.price === 0 ? (
                       <button
                         className="mt-6 sm:mt-8 w-full py-2 sm:py-3 px-4 sm:px-6 rounded-xl text-center font-bold bg-transparent border-2 border-pink2 text-pink2 hover:bg-pink2 hover:text-white transition"
-                        onClick={() => setMessage("You are now on the free plan!")}
+                        onClick={() => handleFreePlan(plan)}
+                        disabled={processingFree}
                       >
-                        Signup for free
+                        {processingFree ? "Processing…" : "Signup for free"}
                       </button>
                     ) : (
                       <>
@@ -291,6 +333,12 @@ const Subscriptions = () => {
                         </button>
                       </>
                     )}
+                    {/* show free-plan errors near message area */}
+                    {freeError && (
+          <div className="mt-4 text-selectRed1 text-center text-sm">
+            {freeError}
+          </div>
+        )}
                   </div>
                 </div>
               ))
