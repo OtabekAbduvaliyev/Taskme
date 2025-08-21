@@ -499,53 +499,59 @@ const Navbar = ({ onToggleSidebar, sidebarOpen }) => {
                             .map((role) => (
                               <li key={role.company.id} className="flex items-center gap-2">
                                 <button
-                                  className={`w-full text-left px-3 py-2 rounded-lg text-[#C4E1FE] hover:bg-white/5 transition flex items-center justify-between`}
+                                  // Disabled and accessible attributes added; style adjusted for disabled state
+                                  className={`w-full text-left px-3 py-2 rounded-lg text-[#C4E1FE] transition flex items-center justify-between ${selectedRole?.id === role.id ? "opacity-60 cursor-not-allowed" : "hover:bg-white/5"}`}
                                   onClick={async () => {
+                                    // prevent re-selecting the already selected company
+                                    if (selectedRole?.id === role.id) return;
                                     // Show overlay and immediately reflect selection in UI
                                     setCompanySwitching(true);
                                     setSelectedRole(role);
                                     setShowProfileDropdown(false);
- 
+
                                     try {
-                                     // Start changeCompany and also start a 6s minimum timer
-                                    // tell changeCompany not to show toast immediately; we will show it after minWait
-                                    const changePromise = changeCompany({ roleId: role.id }, { deferToast: true });
-                                    const minWaitPromise = delay(5000);
- 
-                                    // wait for change to complete
-                                    const changeResult = await changePromise;
- 
-                                    // fetch workspaces after change; wait for both fetch and min wait
-                                    const token = localStorage.getItem("token");
-                                    const wsReq = axiosInstance.get("/workspace", {
-                                      headers: { Authorization: `Bearer ${token}` },
-                                    });
- 
-                                    const [wsRes] = await Promise.all([wsReq, minWaitPromise]);
- 
-                                    const wsList = Array.isArray(wsRes.data) ? wsRes.data : (wsRes.data?.workspaces || []);
-                                    const firstWs = wsList && wsList.length ? wsList[0] : null;
-                                    if (firstWs && (firstWs.id || firstWs._id)) {
-                                      navigate(`/dashboard/workspace/${firstWs.id || firstWs._id}`, { replace: true });
-                                    } else {
+                                      // Start changeCompany and also start a 6s minimum timer
+                                      // tell changeCompany not to show toast immediately; we will show it after minWait
+                                      const changePromise = changeCompany({ roleId: role.id }, { deferToast: true });
+                                      const minWaitPromise = delay(5000);
+
+                                      // wait for change to complete
+                                      const changeResult = await changePromise;
+
+                                      // fetch workspaces after change; wait for both fetch and min wait
+                                      const token = localStorage.getItem("token");
+                                      const wsReq = axiosInstance.get("/workspace", {
+                                        headers: { Authorization: `Bearer ${token}` },
+                                      });
+
+                                      const [wsRes] = await Promise.all([wsReq, minWaitPromise]);
+
+                                      const wsList = Array.isArray(wsRes.data) ? wsRes.data : (wsRes.data?.workspaces || []);
+                                      const firstWs = wsList && wsList.length ? wsList[0] : null;
+                                      if (firstWs && (firstWs.id || firstWs._id)) {
+                                        navigate(`/dashboard/workspace/${firstWs.id || firstWs._id}`, { replace: true });
+                                      } else {
+                                        navigate("/dashboard", { replace: true });
+                                      }
+
+                                      // After the minimum wait AND change completion, show toast to user
+                                      if (changeResult && changeResult.success) {
+                                        showToast("success", changeResult.message || "Company switched successfully");
+                                      } else {
+                                        showToast("error", changeResult?.message || "Failed to change company");
+                                      }
+                                    } catch (err) {
+                                      // fallback: ensure at least 6s elapsed before hiding and navigate to dashboard
+                                      try { await delay(6000); } catch {}
                                       navigate("/dashboard", { replace: true });
+                                    } finally {
+                                      setCompanySwitching(false);
                                     }
- 
-                                    // After the minimum wait AND change completion, show toast to user
-                                    if (changeResult && changeResult.success) {
-                                      showToast("success", changeResult.message || "Company switched successfully");
-                                    } else {
-                                      showToast("error", changeResult?.message || "Failed to change company");
-                                    }
-                                   } catch (err) {
-                                     // fallback: ensure at least 6s elapsed before hiding and navigate to dashboard
-                                     try { await delay(6000); } catch {}
-                                     navigate("/dashboard", { replace: true });
-                                   } finally {
-                                     setCompanySwitching(false);
-                                   }
-                                 }}
-                               >
+                                  }}
+                                  disabled={selectedRole?.id === role.id}
+                                  aria-disabled={selectedRole?.id === role.id}
+                                  title={selectedRole?.id === role.id ? "Currently selected" : "Switch to this company"}
+                                >
                                   <div className="flex items-center gap-3">
                                     {/* fixed pink dot to match logout button color */}
                                     <span className="w-3 h-3 rounded-full bg-pink2" />

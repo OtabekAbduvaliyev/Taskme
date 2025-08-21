@@ -88,13 +88,16 @@ const Sheets = () => {
 
   useEffect(() => {
     if (sheets?.sheets.length && !sheetId) {
-      // Navigate to the first sheet if sheetId is not provided, preserve query params
+      // Navigate to the newest sheet (assumes backend appends new sheets to the end)
       const qs = searchParams.toString();
-      navigate(
-        `/dashboard/workspace/${id}/${sheets.sheets[0].id}${qs ? `?${qs}` : ""}`
-      );
+      const newestSheet = sheets.sheets[sheets.sheets.length - 1];
+      if (newestSheet) {
+        navigate(
+          `/dashboard/workspace/${id}/${newestSheet.id}${qs ? `?${qs}` : ""}`
+        );
+      }
     }
-  }, [sheets, sheetId, id, navigate]);
+  }, [sheets, sheetId, id, navigate, searchParams]);
 
   const handleToggleModal = useCallback(async () => {
     setIsOpen((prev) => !prev);
@@ -122,13 +125,14 @@ const Sheets = () => {
     setDeleteModalOpen(false);
     setSheetToDelete(null);
     await refetch();
-    // Remove deleted sheetId from URL
+    // Remove deleted sheetId from URL and navigate to newest remaining sheet (if any)
     if (sheets?.sheets) {
       const remainingSheets = sheets.sheets.filter(s => s.id !== sheetIdToDelete);
       if (remainingSheets.length > 0) {
         const qs = searchParams.toString();
+        const nextSheet = remainingSheets[remainingSheets.length - 1]; // newest remaining
         navigate(
-          `/dashboard/workspace/${id}/${remainingSheets[0].id}${qs ? `?${qs}` : ""}`
+          `/dashboard/workspace/${id}/${nextSheet.id}${qs ? `?${qs}` : ""}`
         );
       } else {
         const qs = searchParams.toString();
@@ -424,7 +428,11 @@ const {
                 editingSheetName={editingSheetName}
                 onSheetCreated={handleSheetCreated}
               />
-              {sheets?.sheets.map((sheet) => {
+              {/*
+                Render sheets in reverse so newest appears first in the tab list.
+                Use slice() to avoid mutating the original array.
+              */}
+              {sheets?.sheets.slice().reverse().map((sheet) => {
                 const qs = searchParams.toString();
                 return (
                   <Link
@@ -432,7 +440,8 @@ const {
                     to={`/dashboard/workspace/${id}/${sheet.id}${qs ? `?${qs}` : ""}`}
                     className="sheet flex items-center gap-[6px] hover:bg-gray transition-all duration-1000 bg-grayDash rounded-[9px] pl-[10px] sm:pl-[12px] pr-[6px] py-[6px] inline-flex cursor-pointer text-[13px] sm:text-[14px]"
                   >
-                    <p>{!sheet.name == "" ? sheet.name : "Untitled"}</p>
+                    {/* show Untitled when name is falsy */}
+                    <p>{sheet.name ? sheet.name : "Untitled"}</p>
                     <Dropdown
                       trigger={["click"]}
                       menu={{ items: items(sheet.id, sheet.order, sheet.name) }}

@@ -141,7 +141,7 @@ const AdminDashboard = () => {
 
         {/* content container placed below header (header h-16).
             On mobile allow normal document scrolling (no internal scroll), on md+ enable fixed-height scroll. */}
-        <div className="admin-content mt-16 md:h-[calc(100vh-4rem)] h-auto px-4 md:px-8 py-6 bg-gray3 rounded-lg w-full md:overflow-auto overflow-visible">
+        <div className="admin-content mt-16 md:h-[calc(100vh-4rem)] h-auto px-4 md:px-8 py-6 bg-gray3 rounded-lg w-full md:overflow-auto overflow-visible custom-scrollbar">
           {renderSection()}
         </div>
       </main>

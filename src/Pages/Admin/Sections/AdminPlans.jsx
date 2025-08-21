@@ -14,6 +14,7 @@ const initialForm = {
   maxTasks: 0,
   isCustomized: false,
   customizedPlanFor: [],
+  tags: '', // changed to string
 };
 
 const AdminPlans = () => {
@@ -29,6 +30,13 @@ const AdminPlans = () => {
   // Delete modal state
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, planId: null });
 
+  // new states for searching/selecting users for customized plans
+  const [searchEmail, setSearchEmail] = useState('');
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchResults, setSearchResults] = useState([]); // array of user objects
+  const [selectedUsers, setSelectedUsers] = useState([]); // array of user objects (selected)
+  const [searchNoResults, setSearchNoResults] = useState(false);
+
   // Fetch all plans
   const fetchPlans = async () => {
     setLoading(true);
@@ -37,11 +45,19 @@ const AdminPlans = () => {
       const res = await axiosInstance.get('/plan', {
         headers: { Authorization: `Bearer ${token}` }
       });
-      // Ensure each plan has an id property for consistency
-      const plansWithId = (res.data || []).map(plan => ({
-        ...plan,
-        id: plan._id || plan.id // normalize id field
-      }));
+      // Ensure each plan has an id property for consistency and normalize tags (support plan.tags or backend's tags)
+      const plansWithId = (res.data || []).map(plan => {
+        const rawTags = Array.isArray(plan.tags) ? plan.tags
+          : (typeof plan.tags === 'string' ? plan.tags : '');
+        const tagsArray = typeof rawTags === 'string'
+          ? rawTags.split(',').map(t => t.trim()).filter(Boolean)
+          : (Array.isArray(rawTags) ? rawTags : []);
+        return {
+          ...plan,
+          id: plan._id || plan.id,
+          tags: tagsArray,
+        };
+      });
       setPlans(plansWithId);
     } catch {
       setToast({ isOpen: true, type: 'error', message: 'Failed to load plans.' });
@@ -64,6 +80,10 @@ const AdminPlans = () => {
         // Split by comma and trim
         return { ...f, customizedPlanFor: value.split(",").map(v => v.trim()).filter(Boolean) };
       }
+      if (name === "tags") {
+        // keep tags as string for the form input
+        return { ...f, tags: value };
+      }
       return {
         ...f,
         [name]: name === 'price' || name.startsWith('max')
@@ -84,6 +104,8 @@ const AdminPlans = () => {
         ? form.customizedPlanFor
         : [],
       isCustomized: !!form.isCustomized,
+      // send tags as single string field named "tags"
+      tags: typeof form.tags === 'string' ? form.tags : Array.isArray(form.tags) ? form.tags.join(', ') : '',
     };
     try {
       if (editId) {
@@ -109,6 +131,12 @@ const AdminPlans = () => {
   // Handle edit button
   const handleEdit = plan => {
     setEditId(plan.id); // always use normalized id
+    // determine tags from plan.tags (array/string)
+    const rawTags = Array.isArray(plan.tags) ? plan.tags
+      : (typeof plan.tags === 'string' ? plan.tags : '');
+    const tagsArray = typeof rawTags === 'string'
+      ? rawTags.split(',').map(t => t.trim()).filter(Boolean)
+      : (Array.isArray(rawTags) ? rawTags : []);
     setForm({
       name: plan.name,
       description: plan.description,
@@ -120,7 +148,10 @@ const AdminPlans = () => {
       maxTasks: plan.maxTasks,
       isCustomized: !!plan.isCustomized,
       customizedPlanFor: Array.isArray(plan.customizedPlanFor) ? plan.customizedPlanFor : [],
+      tags: tagsArray.join(', '), // populate as string
     });
+    // clear previous selectedUsers; admin may search to find the users and re-add for display
+    setSelectedUsers([]);
   };
 
   // Handle delete button (open modal)
@@ -171,6 +202,62 @@ const AdminPlans = () => {
     setForm(initialForm);
   };
 
+  // new: search user by email
+  const searchUserByEmail = async (email) => {
+    if (!email) return;
+    setSearchLoading(true);
+    setSearchResults([]);
+    setSearchNoResults(false);
+    try {
+      const token = localStorage.getItem('token');
+      // use endpoint: /user/{email}
+      const res = await axiosInstance.get(`/user/${encodeURIComponent(email)}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      // Expect res.data to be array or single user
+      const results = Array.isArray(res.data) ? res.data : (res.data ? [res.data] : []);
+      setSearchResults(results);
+      if (results.length === 0) {
+        setSearchNoResults(true);
+      } else {
+        setSearchNoResults(false);
+      }
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.message || 'Failed to search user.';
+      setToast({ isOpen: true, type: 'error', message: msg });
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  // new: add user to customizedPlanFor (store id in form and user object in selectedUsers)
+  const addCustomizedUser = (user) => {
+    if (!user || !user._id && !user.id) return;
+    const userId = user._id || user.id;
+    setForm(f => {
+      const existing = Array.isArray(f.customizedPlanFor) ? f.customizedPlanFor : [];
+      if (existing.includes(userId)) return f;
+      return { ...f, customizedPlanFor: [...existing, userId] };
+    });
+    setSelectedUsers(prev => {
+      if (prev.some(u => (u._id || u.id) === userId)) return prev;
+      return [...prev, user];
+    });
+    // optionally clear search results / input
+    setSearchResults([]);
+    setSearchEmail('');
+    setSearchNoResults(false);
+  };
+
+  // new: remove user from customizedPlanFor and selectedUsers
+  const removeCustomizedUser = (userId) => {
+    setForm(f => ({
+      ...f,
+      customizedPlanFor: (Array.isArray(f.customizedPlanFor) ? f.customizedPlanFor : []).filter(id => id !== userId)
+    }));
+    setSelectedUsers(prev => prev.filter(u => (u._id || u.id) !== userId));
+  };
+
   return (
     <div>
       <h2 className="text-2xl font-radioCanada text-white mb-8">Plans Management</h2>
@@ -185,7 +272,15 @@ const AdminPlans = () => {
               {plans.map(plan => (
                 <li key={plan.id || plan.name} className="bg-gray3 rounded-lg p-4 text-white2 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                   <div>
-                    <div className="font-bold text-white">{plan.name}</div>
+                    <div className="font-bold text-white flex items-center gap-3">
+                      <span>{plan.name}</span>
+                      {/* tags badges */}
+                      <div className="flex flex-wrap gap-2">
+                        {(plan.tags || []).map((tag, idx) => (
+                          <span key={idx} className="text-xs bg-pink2 text-white px-2 py-0.5 rounded-full">{tag}</span>
+                        ))}
+                      </div>
+                    </div>
                     <div className="text-xs mb-2">{plan.description}</div>
                     <div className="flex flex-wrap gap-3 text-xs">
                       <span>Price: <span className="text-pink2">${plan.price}</span></span>
@@ -223,18 +318,127 @@ const AdminPlans = () => {
             {editId ? 'Update Plan' : 'Create New Plan'}
           </h3>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-white2 mb-1">Name</label>
-              <input
-                type="text"
-                name="name"
-                value={form.name}
-                onChange={handleChange}
-                required
-                className="w-full rounded px-3 py-2 bg-gray3 text-white"
-                disabled={formLoading}
-              />
+            {/* Name and Tags side-by-side */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-white2 mb-1">Name</label>
+                <input
+                  type="text"
+                  name="name"
+                  value={form.name}
+                  onChange={handleChange}
+                  required
+                  className="w-full rounded px-3 py-2 bg-gray3 text-white"
+                  disabled={formLoading}
+                />
+              </div>
+              <div>
+                <label className="block text-white2 mb-1">Tags (comma separated)</label>
+                <input
+                  type="text"
+                  name="tags"
+                  value={form.tags || ''}
+                  onChange={handleChange}
+                  className="w-full rounded px-3 py-2 bg-gray3 text-white"
+                  disabled={formLoading}
+                  placeholder="most popular, premium"
+                />
+              </div>
             </div>
+
+            {/* new: Is Customized checkbox */}
+            <div className="flex items-center gap-3">
+              <input
+                id="isCustomized"
+                type="checkbox"
+                name="isCustomized"
+                checked={!!form.isCustomized}
+                onChange={handleChange}
+                disabled={formLoading}
+                className="h-4 w-4"
+              />
+              <label htmlFor="isCustomized" className="text-white2">Is Customized</label>
+            </div>
+
+            {/* show search input when customized selected */}
+            {form.isCustomized && (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <input
+                    type="email"
+                    placeholder="Search user by email"
+                    value={searchEmail}
+                    onChange={e => setSearchEmail(e.target.value)}
+                    className="w-full rounded px-3 py-2 bg-gray3 text-white"
+                    disabled={searchLoading || formLoading}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => searchUserByEmail(searchEmail)}
+                    disabled={searchLoading || formLoading || !searchEmail}
+                    className="px-4 py-2 rounded bg-pink2 text-white"
+                  >
+                    {searchLoading ? 'Searching...' : 'Search'}
+                  </button>
+                </div>
+
+                {/* search results */}
+                {searchLoading ? (
+                  <div className="text-white2 text-sm">Searching...</div>
+                ) : searchResults.length > 0 ? (
+                  <div className="bg-gray3 rounded p-3">
+                    <div className="text-white2 text-sm mb-2">Search Results</div>
+                    <ul className="space-y-2">
+                      {searchResults.map(u => {
+                        const uid = u._id || u.id;
+                        const displayName = (u.firstName || u.first_name || u.lastName || u.last_name)
+                          ? `${u.firstName || u.first_name || ''}${u.lastName || u.last_name ? ' ' + (u.lastName || u.last_name) : ''}`.trim()
+                          : (u.name || u.email);
+                        return (
+                          <li key={uid} className="flex items-center justify-between">
+                            <div className="text-white2 text-sm">{displayName} — {u.email}</div>
+                            <button
+                              type="button"
+                              onClick={() => addCustomizedUser(u)}
+                              disabled={formLoading || (Array.isArray(form.customizedPlanFor) && form.customizedPlanFor.includes(uid))}
+                              className="px-3 py-1 rounded bg-yellow text-black text-xs font-bold"
+                            >
+                              {Array.isArray(form.customizedPlanFor) && form.customizedPlanFor.includes(uid) ? 'Added' : 'Add'}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                ) : searchNoResults ? (
+                  <div className="bg-gray3 rounded p-3 text-white2 text-sm">No user found with that email.</div>
+                ) : null}
+
+                {/* selected users badges */}
+                {(selectedUsers.length > 0 || (Array.isArray(form.customizedPlanFor) && form.customizedPlanFor.length > 0)) && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {/* prefer selectedUsers for display; fall back to ids if no user info */}
+                    {selectedUsers.map(u => {
+                      const uid = u._id || u.id;
+                      return (
+                        <span key={uid} className="flex items-center gap-2 bg-pink2 text-white px-2 py-0.5 rounded-full text-xs">
+                          <span>{u.email || uid}</span>
+                          <button type="button" onClick={() => removeCustomizedUser(uid)} className="text-white text-xs">×</button>
+                        </span>
+                      );
+                    })}
+                    {/* display remaining ids if any (when editing and not yet resolved into user objects) */}
+                    {(!selectedUsers.length && Array.isArray(form.customizedPlanFor)) && form.customizedPlanFor.map(id => (
+                      <span key={id} className="flex items-center gap-2 bg-pink2 text-white px-2 py-0.5 rounded-full text-xs">
+                        <span>{id}</span>
+                        <button type="button" onClick={() => removeCustomizedUser(id)} className="text-white text-xs">×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div>
               <label className="block text-white2 mb-1">Description</label>
               <textarea
@@ -326,30 +530,6 @@ const AdminPlans = () => {
                 />
               </div>
             </div>
-            {/* <div>
-              <label className="block text-white2 mb-1">Is Customized</label>
-              <input
-                type="checkbox"
-                name="isCustomized"
-                checked={form.isCustomized}
-                onChange={handleChange}
-                className="mr-2"
-                disabled={formLoading}
-              />
-              <span className="text-white2">Check if this is a customized plan</span>
-            </div> */}
-            {/* <div>
-              <label className="block text-white2 mb-1">Customized Plan For (comma separated)</label>
-              <input
-                type="text"
-                name="customizedPlanFor"
-                value={form.customizedPlanFor.join(", ")}
-                onChange={handleChange}
-                className="w-full rounded px-3 py-2 bg-gray3 text-white"
-                disabled={formLoading}
-                placeholder="companyId1, companyId2, ..."
-              />
-            </div> */}
             <div className="flex gap-2">
               <button
                 type="submit"
