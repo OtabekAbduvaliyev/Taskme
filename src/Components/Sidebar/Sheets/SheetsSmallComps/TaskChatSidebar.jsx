@@ -414,7 +414,7 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                                 >
                                     {(!members || members.length === 0) ? (
                                         <FaUserSlash
-                                            className="text-gray4 w-7 h-7"
+                                            className="text-gray2 w-7 h-7"
                                             title="No members exist"
                                         />
                                     ) : (
@@ -436,7 +436,7 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                                 </div>
                             </div>
                             <button
-                                className="text-gray4 hover:text-pink2 text-2xl"
+                                className="text-gray2 hover:text-pink2 text-2xl"
                                 onClick={onClose}
                             >
                                 <IoClose />
@@ -449,7 +449,7 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                             className={`flex-1 flex items-center justify-center gap-2 py-2 font-semibold text-sm transition ${
                                 activeTab === "chat"
                                     ? "text-pink2 border-b-2 border-pink2"
-                                    : "text-gray4"
+                                    : "text-gray2"
                             }`}
                             onClick={() => setActiveTab("chat")}
                         >
@@ -459,7 +459,7 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                             className={`flex-1 flex items-center justify-center gap-2 py-2 font-semibold text-sm transition ${
                                 activeTab === "files"
                                     ? "text-pink2 border-b-2 border-pink2"
-                                    : "text-gray4"
+                                    : "text-gray2"
                             }`}
                             onClick={() => setActiveTab("files")}
                         >
@@ -469,7 +469,7 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                             className={`flex-1 flex items-center justify-center gap-2 py-2 font-semibold text-sm transition ${
                                 activeTab === "activity"
                                     ? "text-pink2 border-b-2 border-pink2"
-                                    : "text-gray4"
+                                    : "text-gray2"
                             }`}
                             onClick={() => setActiveTab("activity")}
                         >
@@ -488,7 +488,7 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                                                 Select Members
                                             </div>
                                             <button
-                                                className="text-gray4 hover:text-pink2 text-xl"
+                                                className="text-gray2 hover:text-pink2 text-xl"
                                                 onClick={() => setShowMemberModal(false)}
                                             >
                                                 <IoClose />
@@ -496,7 +496,7 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                                         </div>
                                         <div className="max-h-[160px] overflow-y-auto mb-4">
                                             {!companyMembers || companyMembers.length === 0 ? (
-                                                <div className="text-gray4 text-center py-6">
+                                                <div className="text-gray2 text-center py-6">
                                                     No company members found.
                                                 </div>
                                             ) : (
@@ -568,7 +568,7 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                                 ref={chatContainerRef}
                             >
                                 {messages.length === 0 ? (
-                                    <div className="text-gray4 text-center mt-10">
+                                    <div className="text-gray2 text-center mt-10">
                                         <p>No chat messages yet.</p>
                                         <p className="text-sm mt-2">Start a conversation for this task!</p>
                                     </div>
@@ -612,7 +612,7 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                                                                 {m.content}
                                                             </div>
                                                         </div>
-                                                        <span className="text-xs text-gray4 mt-1">
+                                                        <span className="text-xs text-gray2 mt-1">
                                                             {dayjs(m.createdAt).format("HH:mm, MMM D")}
                                                         </span>
                                                     </div>
@@ -672,7 +672,7 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                                     </button>
                                 </form>
                                 <div className="flex items-center gap-2 mt-3">
-                                    <span className="text-xs text-gray4">Online:</span>
+                                    <span className="text-xs text-gray2">Online:</span>
                                     {onlineUsers.length > 0 ? (
                                         <div className="flex -space-x-2">
                                             {onlineUsers.map((u) => (
@@ -690,7 +690,7 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                                             ))}
                                         </div>
                                     ) : (
-                                        <span className="text-xs text-gray4 ml-1">No one online</span>
+                                        <span className="text-xs text-gray2 ml-1">No one online</span>
                                     )}
                                 </div>
                             </div>
@@ -709,9 +709,9 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                             >
                                 <div className="flex-1 text-center md:text-left">
                                     <div className="text-white font-semibold">Drag & drop files here</div>
-                                    <div className="text-gray4 text-sm mt-1">
+                                    <div className="text-gray2 text-sm mt-1">
                                         or click to select files. Supports images, docs and more.
-                                        <span className="block text-xs text-gray4 mt-1">Max file size: <span className="text-white font-medium">{formatMaxSize()}</span></span>
+                                        <span className="block text-xs text-gray2 mt-1">Max file size: <span className="text-white font-medium">{formatMaxSize()}</span></span>
                                     </div>
                                 </div>
                                 <label className="inline-flex items-center gap-2 cursor-pointer">
@@ -743,8 +743,8 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                                                         <div className="h-2 bg-[#2A2D36] rounded-md flex-1 overflow-hidden">
                                                             <div style={{ width: `${q.progress}%` }} className={`h-2 bg-pink2 rounded-md transition-all`} />
                                                         </div>
-                                                        <div className="text-xs text-gray4 whitespace-nowrap">{q.progress}%</div>
-                                                        <div className="text-xs text-gray4">· {formatBytes(q.size)}</div>
+                                                        <div className="text-xs text-gray2 whitespace-nowrap">{q.progress}%</div>
+                                                        <div className="text-xs text-gray2">· {formatBytes(q.size)}</div>
                                                     </div>
                                                     {q.status === "error" && (
                                                         <div className="text-xs text-red-500 mt-1">
@@ -754,7 +754,7 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                                                 </div>
                                                 <div className="flex items-center gap-2 ml-2">
                                                     {q.status === "uploading" ? (
-                                                        <button className="text-gray4 px-2 py-1 rounded" title="Uploading" disabled>…</button>
+                                                        <button className="text-gray2 px-2 py-1 rounded" title="Uploading" disabled>…</button>
                                                     ) : q.status === "error" ? (
                                                         <button onClick={() => uploadSingle(q)} className="text-yellow-400 px-2 py-1 rounded" title="Retry">Retry</button>
                                                     ) : null}
@@ -767,7 +767,7 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
 
                             {/* Files List */}
                             {(!files || files.length === 0) ? (
-                                <div className="text-gray4 text-center mt-10">
+                                <div className="text-gray2 text-center mt-10">
                                     <p>No files uploaded for this task.</p>
                                     <p className="text-sm mt-2">Upload files to share with task members.</p>
                                 </div>
@@ -789,7 +789,7 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                                                 {/* Main info: filename (truncated) and timestamp underneath */}
                                                 <div className="flex-1 min-w-0">
                                                     <div className="text-white truncate">{file.originalName || file.name || file.path?.split?.("/").pop?.() || "file"}</div>
-                                                    <div className="text-xs text-gray4 mt-1">
+                                                    <div className="text-xs text-gray2 mt-1">
                                                         {file.createdAt ? dayjs(file.createdAt).format("MMM D, HH:mm") : (file.uploadedAt ? dayjs(file.uploadedAt).format("MMM D, HH:mm") : "")}
                                                     </div>
                                                 </div>
@@ -798,7 +798,7 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                                                 <div className="flex items-center gap-2 ml-2">
                                                     <button
                                                         onClick={(e) => downloadFile(file, e)}
-                                                        className="text-gray4 px-2 py-1 rounded hover:text-white bg-transparent"
+                                                        className="text-gray2 px-2 py-1 rounded hover:text-white bg-transparent"
                                                         title="Download"
                                                     >
                                                         ⬇
@@ -822,11 +822,11 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                         <div className="flex-1 flex flex-col px-4 py-4 bg-[#23272F] custom-scrollbar overflow-y-auto pb-4">
                             <div className="font-bold text-lg text-white mb-4">Activity Log</div>
                             {isLoadingLogs ? (
-                                <div className="text-gray4 text-center mt-10">Loading...</div>
+                                <div className="text-gray2 text-center mt-10">Loading...</div>
                             ) : (
                                 <>
                                     {(!activityLogs || activityLogs.length === 0) ? (
-                                        <div className="text-gray4 text-center mt-10">
+                                        <div className="text-gray2 text-center mt-10">
                                             <p>No activity logs found for this task.</p>
                                         </div>
                                     ) : (
@@ -862,11 +862,11 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                                                                         <div className="text-white text-sm font-semibold">
                                                                             {user.firstName || "User"} {user.lastName || ""}
                                                                         </div>
-                                                                        <div className="text-gray4 text-xs">
+                                                                        <div className="text-gray2 text-xs">
                                                                             {user.email || ""}
                                                                         </div>
                                                                     </div>
-                                                                    <div className="text-gray4 text-xs">
+                                                                    <div className="text-gray2 text-xs">
                                                                         {dayjs(log.createdAt).format("MMM D, HH:mm")}
                                                                     </div>
                                                                 </div>
@@ -881,7 +881,7 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                                                                         <div className="text-white text-sm break-words">
                                                                             {actionSummary}
                                                                         </div>
-                                                                        <div className="text-gray4">
+                                                                        <div className="text-gray2">
                                                                             {/* simple chevron/arrow that rotates when open */}
                                                                             <svg
                                                                                 className={`w-4 h-4 transform transition-transform ${expandedLogs.includes(id) ? "rotate-90" : ""}`}
@@ -899,7 +899,7 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                                                                     <div className="mt-3 bg-[#23272F] rounded-md p-3 text-sm text-white">
                                                                         {/* Show old -> new with pointer icon */}
                                                                         <div className="flex items-center gap-2 break-words">
-                                                                            <div className="text-gray4">Old:</div>
+                                                                            <div className="text-gray2">Old:</div>
                                                                             <div className="text-white font-medium">
                                                                                 {typeof log.oldValue === "string" && log.oldValue !== "" ? log.oldValue : (log.oldValue ?? "—")}
                                                                             </div>
@@ -915,7 +915,7 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                                                                             </div>
                                                                         </div>
                                                                         {log.updatedKey && (
-                                                                            <div className="text-gray4 text-xs mt-2">
+                                                                            <div className="text-gray2 text-xs mt-2">
                                                                                 Field: <span className="text-white">{log.updatedKey}</span>
                                                                             </div>
                                                                         )}
@@ -931,14 +931,14 @@ const TaskChatSidebar = ({ isOpen, onClose, task }) => {
                                 </>
                             )}
                         </div>
-                    )}
-                </motion.div>
-            )}
-        </AnimatePresence>
-    );
-};
+                     )}
+                 </motion.div>
+             )}
+         </AnimatePresence>
+     );
+ };
 
-export default TaskChatSidebar;
+ export default TaskChatSidebar;
 
 
 

@@ -2,10 +2,10 @@ import React, { useEffect, useState } from "react";
 import testMemImg from "../../assets/default-avatar-icon-of-social-media-user-vector.jpg";
 import { useQuery } from "@tanstack/react-query";
 import axiosInstance from "../../AxiosInctance/AxiosInctance";
-
+import { useNavigate } from "react-router-dom";
 
 const Viewers = ({ role }) => {
-
+  const navigate = useNavigate();
   const token = localStorage.getItem("token");
   const {
     isLoading,
@@ -25,7 +25,6 @@ const Viewers = ({ role }) => {
     staleTime: 300000,
     cacheTime: 600000, // cache for 10 minutes
     refetchOnWindowFocus: false, // don't refetch when window/tab is focused
-
   });
   const [members, setMembers] = useState([]);
   useEffect(() => {
@@ -40,9 +39,19 @@ const Viewers = ({ role }) => {
   return (
     <div>
       {(role === "author" || role === "admin") ? (
-        <div className="bg-grayDash py-3 sm:py-[14px] md:py-[16px] px-3 sm:px-[15px] md:px-[17px] rounded-[17px] font-radioCanada mt-[18px] shadow-xl">
-          <div className="frLine flex justify-between items-center">
+        <div className="bg-grayDash py-3 sm:py-[14px] md:py-[16px] px-3 sm:px-[15px] md:px-[17px] rounded-[17px] font-radioCanada mt-[18px] shadow-xl w-full">
+          <div className="frLine flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-3">
             <h1 className="text-gray2 font-radioCanada text-[14px] sm:text-[15px] md:text-[16px]">Viewers</h1>
+            {viewerMembers.length > 2 && (
+              <button
+                className="w-full sm:w-auto text-white text-[12px] sm:text-[13px] py-[8px] px-[12px] rounded-[9px] text-center bg-transparent hover:bg-white/5 transition"
+                onClick={() => navigate("/dashboard/viewers")}
+                title="See all viewers"
+                aria-label="See all viewers"
+              >
+                See All
+              </button>
+            )}
           </div>
           {viewerMembers.length > 0 ? (
             viewerMembers.map((member, i) => (
@@ -79,7 +88,7 @@ const Viewers = ({ role }) => {
               </div>
             ))
           ) : (
-            <div className="text-gray2 text-center py-4">No viewers found</div>
+            <div className="text-gray2 text-center py-4">Viewers not exist yet</div>
           )}
         </div>
       ) : (

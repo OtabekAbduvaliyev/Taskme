@@ -1,5 +1,5 @@
 // Subscriptions.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useStripe, useElements, CardElement, Elements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
 import { useNavigate } from "react-router-dom"; // add this import
@@ -24,69 +24,81 @@ function PaymentForm({ plan, onSuccess, onCancel }) {
   const elements = useElements();
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState(null);
+  const cardElementRef = useRef(null); // for focusing CardElement
   const token = localStorage.getItem("token"); // Assuming token is stored in localStorage
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  if (!stripe || !elements) return;
-  setProcessing(true);
-  setError(null);
 
-  try {
-    // 1) Create payment intent
-    const createRes = await fetch("https://eventify.preview.uz/api/v1/payment/inline", {
-      method: "POST",
-      headers: { 
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`
-      },
-      body: JSON.stringify({ planId: plan.id })
-    });
-
-    if (!createRes.ok) throw new Error("Failed to create payment intent");
-    const createData = await createRes.json();
-
-    const clientSecret = createData.client_secret || createData.clientSecret;
-    if (!clientSecret) throw new Error("No client secret returned from backend");
-
-    // 2) Confirm payment
-    const cardEl = elements.getElement(CardElement);
-    const result = await stripe.confirmCardPayment(clientSecret, {
-      payment_method: {
-        card: cardEl,
-        billing_details: { name: "Customer Name" }
+  // Focus CardElement when elements is ready
+  useEffect(() => {
+    if (elements) {
+      const card = elements.getElement(CardElement);
+      if (card && typeof card.focus === "function") {
+        card.focus();
       }
-    });
-
-    // 3) Check payment result
-    if (result.error) {
-      setError(result.error.message || "Payment failed");
-      setProcessing(false);
-      return;
     }
+  }, [elements]);
 
-    if (result.paymentIntent && result.paymentIntent.status === "succeeded") {
-      // 4) Notify backend to confirm subscription
-      await fetch("https://eventify.preview.uz/api/v1/payment/inline/confirm", {
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+    setProcessing(true);
+    setError(null);
+
+    try {
+      // 1) Create payment intent
+      const createRes = await fetch("https://eventify.preview.uz/api/v1/payment/inline", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
           "Authorization": `Bearer ${token}`
         },
-        body: JSON.stringify({
-          planId: plan.id,
-          paymentIntentId: result.paymentIntent.id
-        })
+        body: JSON.stringify({ planId: plan.id })
       });
-      onSuccess(result.paymentIntent);
-    } else {
-      setError("Payment status: " + (result.paymentIntent?.status || ""));
+
+      if (!createRes.ok) throw new Error("Failed to create payment intent");
+      const createData = await createRes.json();
+
+      const clientSecret = createData.client_secret || createData.clientSecret;
+      if (!clientSecret) throw new Error("No client secret returned from backend");
+
+      // 2) Confirm payment
+      const cardEl = elements.getElement(CardElement);
+      const result = await stripe.confirmCardPayment(clientSecret, {
+        payment_method: {
+          card: cardEl,
+          billing_details: { name: "Customer Name" }
+        }
+      });
+
+      // 3) Check payment result
+      if (result.error) {
+        setError(result.error.message || "Payment failed");
+        setProcessing(false);
+        return;
+      }
+
+      if (result.paymentIntent && result.paymentIntent.status === "succeeded") {
+        // 4) Notify backend to confirm subscription
+        await fetch("https://eventify.preview.uz/api/v1/payment/inline/confirm", {
+          method: "POST",
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            planId: plan.id,
+            paymentIntentId: result.paymentIntent.id
+          })
+        });
+        onSuccess(result.paymentIntent);
+      } else {
+        setError("Payment status: " + (result.paymentIntent?.status || ""));
+      }
+    } catch (err) {
+      setError(err.message || "Unexpected error");
+    } finally {
+      setProcessing(false);
     }
-  } catch (err) {
-    setError(err.message || "Unexpected error");
-  } finally {
-    setProcessing(false);
-  }
-};
+  };
 
 
   return (
@@ -138,15 +150,15 @@ const SuccessModal = ({ open, plan, onClose, onStart }) => {
         <div className="absolute -top-10 -left-20 w-56 h-56 rounded-full bg-gradient-to-r from-pink2 to-[#7C3AED] opacity-20 blur-2xl pointer-events-none" />
         <div className="p-8 sm:p-12 text-center">
           <div className="mx-auto mb-4 w-20 h-20 rounded-full bg-gradient-to-br from-pink2 to-pink2/70 flex items-center justify-center shadow-lg">
-            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" className="text-white">
-              <path d="M12 2v6" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M6.5 9.5L12 14l5.5-4.5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M5 20h14" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+            {/* Done (checkmark) icon */}
+            <svg width="44" height="44" viewBox="0 0 44 44" fill="none" className="text-white">
+              <circle cx="22" cy="22" r="22" fill="#7658B1" opacity="0.15"/>
+              <path d="M14 23.5L20 29L30 17" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
 
-          <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">Subscription activated!</h2>
-          <p className="text-md text-white/80 mb-4">
+          <h2 className="text-2xl sm:text-3xl font-bold text-pink2 mb-2">Subscription activated!</h2>
+          <p className="text-md text-white mb-4">
             Your <span className="font-semibold text-pink2">{plan?.name || "plan"}</span> is now active.
             You're all set — let's get you started.
           </p>
@@ -155,11 +167,11 @@ const SuccessModal = ({ open, plan, onClose, onStart }) => {
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-white font-semibold">{plan?.name || "Plan"}</div>
-                <div className="text-gray4 text-sm">{plan?.description || "Happy productivity!"}</div>
+                <div className="text-white2 text-sm">{plan?.description || "Happy productivity!"}</div>
               </div>
               <div className="text-right">
                 <div className="text-pink2 font-extrabold text-lg">{plan?.price === 0 ? "$0" : `$${plan?.price}`}</div>
-                <div className="text-gray4 text-xs">per month</div>
+                <div className="text-white2 text-xs">per month</div>
               </div>
             </div>
           </div>
@@ -173,7 +185,7 @@ const SuccessModal = ({ open, plan, onClose, onStart }) => {
             </button>
           </div>
 
-          <div className="mt-4 text-xs text-white/60">
+          <div className="mt-4 text-xs text-white2">
             Tip: Check your dashboard for templates, workspaces and quick-start guides to ramp up faster.
           </div>
         </div>
@@ -265,6 +277,19 @@ const Subscriptions = () => {
   return (
     <Elements stripe={stripePromise}>
       <div className="min-h-screen bg-background py-8 sm:py-16 px-2 font-radioCanada">
+        {/* Back button */}
+        <div className="max-w-4xl mx-auto mb-6">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-2 text-pink2 hover:text-pink font-semibold px-4 py-2 rounded-lg bg-grayDash border border-gray4 hover:bg-gray3 transition"
+          >
+            <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
+              <path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Back
+          </button>
+        </div>
         <div className="max-w-2xl mx-auto text-center mb-8 sm:mb-12">
           <h2 className="text-3xl sm:text-5xl font-bold text-white drop-shadow mb-2 sm:mb-4">Choose Your Plan</h2>
           <p className="text-base sm:text-lg text-white2">

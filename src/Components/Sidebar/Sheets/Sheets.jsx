@@ -8,7 +8,7 @@ import {
   Badge,
   Popover,
 } from "antd";
-import React, { useCallback, useContext, useEffect, useState } from "react";
+import React, { useCallback, useContext, useEffect, useState, useRef } from "react";
 import { BsTable, BsThreeDotsVertical } from "react-icons/bs";
 import { IoAddCircleOutline, IoSearch } from "react-icons/io5";
 import { Link, useParams, useNavigate, useSearchParams } from "react-router-dom";
@@ -58,6 +58,13 @@ const Sheets = () => {
   const [selectedTasks, setSelectedTasks] = useState([]);
   const [itemsPerPage, setItemsPerPage] = useState(initialLimit);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
+
+  // Filters panel state (moved to parent so button sits in the actions bar)
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const toggleFiltersPanel = () => setFiltersOpen((p) => !p);
+
+  // Add this line to define the ref before using it
+  const filtersButtonRef = useRef(null);
 
   // pagination meta from server
   const [pagination, setPagination] = useState({
@@ -495,11 +502,14 @@ const {
                 <div className="flex gap-[12px] sm:gap-[18px] w-full sm:w-auto">
                   <div className="newProject">
                     <button
-                      className="flex bg-white py-[10px] sm:py-[11.5px] px-[10px] sm:px-[12px] items-center rounded-[9px] text-pink2 gap-[8px] sm:gap-[10px]"
+                      className="flex bg-white hover:bg-pink2 hover:text-white duration-200 py-[10px] sm:py-[11.5px] px-[10px] sm:px-[12px] items-center rounded-[9px] text-pink2 gap-[8px] sm:gap-[10px]"
                       onClick={addNewTask}
+                      disabled={isCreatingTask}
                     >
                       <IoAddCircleOutline className="text-[20px] sm:text-[22px]" />
-                      <p className="font-[500] text-[13px] sm:text-[14px]">New Task</p>
+                      <p className="font-[500] text-[13px] sm:text-[14px]">
+                        {isCreatingTask ? "Creating..." : "New Task"}
+                      </p>
                     </button>
                   </div>
                   <div className="search inputsr">
@@ -511,6 +521,15 @@ const {
                       className="bg-grayDash font-radioCanada text-[13px] sm:text-[14px] hover:bg-grayDash outline-none text-white active:bg-grayDash focus:bg-grayDash overflow-hidden border-none w-[180px] sm:w-[210px] h-[42px] sm:h-[46px]"
                     />
                   </div>
+                  {/* Filters button moved here next to search input */}
+                  <div
+                    ref={filtersButtonRef}
+                    className="text-white flex items-center gap-[6px] hover:cursor-pointer px-3 py-2 rounded bg-grayDash"
+                    onClick={toggleFiltersPanel}
+                  >
+                    <CiFilter className="text-[16px]" />
+                    <p className="text-[13px] sm:text-[14px]">Filters</p>
+                  </div>
                 </div>
                 <div className="items-center flex gap-[12px] sm:gap-[16px] w-full sm:w-auto justify-end">
                   <div
@@ -521,14 +540,14 @@ const {
                     <BsTable />
                     <p className="text-[13px] sm:text-[14px]">Table</p>
                   </div>
-                  <div
+                  {/* <div
                     className={`text-white flex items-center gap-[6px] hover:cursor-pointer ${view === "list" ? "font-bold underline" : ""
                       }`}
                     onClick={() => setView("list")}
                   >
                     <FaListUl className="text-[16px] sm:text-[18px]" />
                     <p className="text-[13px] sm:text-[14px]">List</p>
-                  </div>
+                  </div> */}
                   <div
                     className={`text-white flex items-center gap-[6px] hover:cursor-pointer ${view === "calendar" ? "font-bold underline" : ""
                       }`}
@@ -611,7 +630,10 @@ const {
                         setIsMoveModalOpen={setIsMoveModalOpen}
                         handleDeleteTasks={handleDeleteTasks}
                         isCreatingTask={isCreatingTask}
-                        taskRefetch={taskRefetch} // pass refetch so child can refresh after deletes
+                        taskRefetch={taskRefetch}
+                        filtersOpen={filtersOpen}
+                        onToggleFilters={toggleFiltersPanel}
+                        filtersButtonRef={filtersButtonRef}
                       />
                     )}
                     {view === "list" && (

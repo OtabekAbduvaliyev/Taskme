@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
 import { motion } from 'framer-motion';
-import { FiUser, FiUserPlus, FiLock, FiBriefcase, FiSave, FiEdit2, FiCamera, FiEye, FiEyeOff, FiX, FiTrash2 } from 'react-icons/fi';
+import { FiUser, FiUserPlus, FiLock, FiBriefcase, FiSave, FiEdit2, FiCamera, FiEye, FiEyeOff, FiX, FiTrash2, FiCreditCard } from 'react-icons/fi';
 import axiosInstance from '../../AxiosInctance/AxiosInctance';
 import { AuthContext } from '../../Auth/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -64,12 +64,26 @@ const Settings = () => {
     fetchUserData();
   }, []);
 
+  const [isProfileChanged, setIsProfileChanged] = useState(false);
+
+  useEffect(() => {
+    // Reset isProfileChanged when userData changes (e.g., after save or fetch)
+    setIsProfileChanged(false);
+  }, [userData]);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setForm(prev => {
+      const updated = { ...prev, [name]: value };
+      // Check if firstName or lastName differs from userData
+      const changed =
+        (name === "firstName" && value !== (userData?.firstName || "")) ||
+        (name === "lastName" && value !== (userData?.lastName || "")) ||
+        (updated.firstName !== (userData?.firstName || "")) ||
+        (updated.lastName !== (userData?.lastName || ""));
+      setIsProfileChanged(changed);
+      return updated;
+    });
   };
 
   const handleAvatarChange = async (event) => {
@@ -109,6 +123,7 @@ const Settings = () => {
       });
 
       setIsEditing(false);
+      setIsProfileChanged(false); // Reset dirty state after save
       const response = await axiosInstance.get('/user/info', {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -299,6 +314,34 @@ const Settings = () => {
     }
   };
 
+  // Billing tab: fetch usage data
+  const [billingUsage, setBillingUsage] = useState(null); // new
+  const [billingLoading, setBillingLoading] = useState(false); // new
+
+  useEffect(() => {
+    if (activeTab !== "billing") return;
+    setBillingLoading(true);
+    axiosInstance.get("/company/usage", {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(res => setBillingUsage(res.data))
+      .catch(() => setBillingUsage(null))
+      .finally(() => setBillingLoading(false));
+  }, [activeTab, token]);
+
+  // prepare usage items outside JSX to avoid rendering raw array literal
+  const usageItems = React.useMemo(() => {
+    const plan = billingUsage?.plan || {};
+    const usage = billingUsage?.usageInPercent || {};
+    return [
+      { label: 'Workspaces', value: billingUsage?.workspaces ?? 0, max: plan.maxWorkspaces ?? '-', percent: usage.workspace ?? 0 },
+      { label: 'Sheets', value: billingUsage?.sheets ?? 0, max: plan.maxSheets ?? '-', percent: usage.sheet ?? 0 },
+      { label: 'Members', value: billingUsage?.members ?? 0, max: plan.maxMembers ?? '-', percent: usage.member ?? 0 },
+      { label: 'Viewers', value: billingUsage?.viewers ?? 0, max: plan.maxViewers ?? '-', percent: usage.viewer ?? 0 },
+      { label: 'Tasks', value: billingUsage?.tasks ?? 0, max: plan.maxTasks ?? '-', percent: usage.task ?? 0 },
+    ];
+  }, [billingUsage]);
+
   const tabContent = {
     profile: (
       <div className="space-y-6 py-3">
@@ -358,7 +401,7 @@ const Settings = () => {
                   type="email"
                   value={userData?.email || ''}
                   readOnly
-                  className="w-full bg-[#111111] border border-[#2A2A2A] rounded-lg py-2 px-3 text-white opacity-80 cursor-not-allowed"
+                  className="w-full bg-[#111111] border border-[#2A2A2E] rounded-lg py-2 px-3 text-white opacity-80 cursor-not-allowed"
                 />
               </div>
 
@@ -408,7 +451,8 @@ const Settings = () => {
                     onClick={handleSave}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    className="px-5 py-2 bg-pink2 text-black rounded-lg font-semibold"
+                    className="px-5 py-2 bg-pink2 text-black rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={!isProfileChanged}
                   >
                     <FiSave className="inline mr-2" />
                     Save Changes
@@ -607,7 +651,7 @@ const Settings = () => {
           ) : (
             <div className="space-y-3">
               {invitations.map((inv) => (
-                <div key={inv.id} className="flex items-center justify-between bg-[#0B0C0F] p-3 rounded-md border border-[#1F1F1F]">
+                <div key={inv.id} className="flex items-center justify-between bg-[#0B0F10] p-3 rounded-md border border-[#1F1F1F]">
                   <div className="flex items-center gap-3">
                     <img
                       src={inv.user?.avatar?.path ? `https://eventify.preview.uz/${inv.user.avatar.path}` : defImg}
@@ -635,6 +679,58 @@ const Settings = () => {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      </div>
+    ),
+    billing: (
+      <div className="space-y-6 py-3">
+        <div className="bg-[#141416] border border-[#2E2E2E] rounded-2xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-[#1B1B1B] flex items-center justify-center text-pink2">
+                <FiCreditCard />
+              </div>
+              <div>
+                <div className="text-lg font-semibold text-white">Billing & Usage</div>
+                <div className="text-sm text-gray2">View your plan and usage limits</div>
+              </div>
+            </div>
+          </div>
+          {billingLoading ? (
+            <div className="text-gray2">Loading billing info…</div>
+          ) : !billingUsage ? (
+            <div className="text-gray2">No billing info found.</div>
+          ) : (
+            <div className="space-y-6">
+              <div>
+                <div className="text-sm text-gray2">Current Plan</div>
+                <div className="text-xl font-bold text-pink2">{billingUsage.plan?.name || '-'}</div>
+                <div className="text-sm text-gray2">{billingUsage.plan?.description}</div>
+                <div className="text-lg font-bold text-white mt-2">
+                  {billingUsage.plan?.price === 0 ? 'Free' : `$${billingUsage.plan?.price}/mo`}
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-[#C4E1FE] mb-2">Usage</div>
+                <div className="space-y-3">
+                  {usageItems.map(row => (
+                    <div key={row.label}>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="text-white">{row.label}</span>
+                        <span className="text-gray2">{row.value} / {row.max}</span>
+                      </div>
+                      <div className="w-full h-2 bg-[#232323] rounded">
+                        <div
+                          className="h-2 rounded bg-pink2 transition-all"
+                          style={{ width: `${Math.min(Number(row.percent) || 0, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -679,6 +775,7 @@ const Settings = () => {
               { id: 'security', icon: FiLock, label: 'Security' },
               { id: 'upgrade', icon: FiBriefcase, label: 'Upgrade' },
               { id: 'company', icon: FiBriefcase, label: 'Company' },
+              { id: 'billing', icon: FiCreditCard, label: 'Billing' }, // added
               { id: 'invitations', icon: FiUserPlus, label: 'Invitations' }
             ].map(tab => (
               <button

@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useContext, useEffect, useRef } from "react";
+import ReactDOM from "react-dom";
 import axiosInstance from "../../../AxiosInctance/AxiosInctance";
 import { AuthContext } from "../../../Auth/AuthContext";
 import { useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { RiCheckboxBlankLine, RiCheckboxLine } from "react-icons/ri";
 import { MdDragIndicator } from "react-icons/md";
 import { IoAddCircleOutline } from "react-icons/io5";
@@ -14,7 +15,7 @@ import AnimatedNoData from "./SheetsSmallComps/AnimatedNoData";
 import swal from "sweetalert";
 import { AnimatePresence, motion } from "framer-motion";
 import DeleteConfirmationModal from "../../Modals/DeleteConfirmationModal";
-import { Dropdown, Menu, Select } from "antd";
+import { Dropdown, Menu, Select, Switch } from "antd";
 import { MdEdit, MdDelete } from "react-icons/md";
 import TaskChatSidebar from "./SheetsSmallComps/TaskChatSidebar";
 import dayjs from "dayjs";
@@ -35,6 +36,9 @@ const SheetTabel = ({
   setFilteredTasks,
   isCreatingTask,
   taskRefetch, // <- new prop (optional) to call parent's refetch
+  filtersOpen = false, // controlled by parent; parent renders the Filters button
+  onToggleFilters, // optional toggle handler from parent
+  filtersButtonRef = null, // ref to anchor portal to the parent Filters button (default null)
 }) => {
   // track which task ids are currently being deleted (shows UI & disables interactions)
   const [deletingTaskIds, setDeletingTaskIds] = useState([]);
@@ -66,6 +70,9 @@ const SheetTabel = ({
   const [chatTask, setChatTask] = useState(null);
   const token = localStorage.getItem("token");
   const { createColumn, dndOrdersTasks } = useContext(AuthContext);
+
+  // New: queryClient to invalidate other sheet queries after updates
+
 
   // Helper: derive select options from sheets.columns (same source as desktop table)
   const getColumnOptions = (key) => {
@@ -167,6 +174,11 @@ const SheetTabel = ({
     staleTime: 300000,
   });
 
+  // derive visible columns (preserve server order, only include those with show===true)
+  const visibleColumns = Array.isArray(sheets?.columns)
+    ? sheets.columns.filter((c) => c && c.show)
+    : [];
+
   useEffect(() => {
     if (tasks) {
       // Keep the original order as received from the server (do not sort by `order`)
@@ -176,7 +188,116 @@ const SheetTabel = ({
       setColumnOrder(sheets.columns.map((_, index) => index));
     }
   }, [tasks, sheets]);
+  const queryClient = useQueryClient();
+  // New: track column ids currently updating to disable their switches
+  const [updatingColumnIds, setUpdatingColumnIds] = useState([]);
 
+  // New: dropdown positioning for the filters portal (was missing)
+  const [dropdownStyle, setDropdownStyle] = useState({ top: 0, left: 8, width: 300 });
+  // portal ref (optional) - used for outside click detection already handled by parent
+  const filtersPortalRef = useRef(null);
+
+  // Toggle a column's `show` boolean and update server, with optimistic UI loading per-column
+  const toggleColumnShow = useCallback(
+    async (column) => {
+      if (!column || !column.id) return;
+      const cid = column.id;
+      setUpdatingColumnIds((prev) => [...new Set([...prev, cid])]);
+      try {
+        const putData = {
+          name: column.name || column.key || "",
+          show: !column.show,
+          type: column.type || "TEXT",
+          selectedId: cid,
+        };
+        await axiosInstance.put(`/column/${cid}`, putData, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        // Invalidate queries so the latest sheet/columns are fetched.
+        // Use queryClient.invalidateQueries instead of calling refetch here
+        // to avoid referencing refetch before it's initialized.
+        await queryClient.invalidateQueries(["sheets", sheetId]);
+        await queryClient.invalidateQueries(["sheets"]);
+      } catch (err) {
+        console.error("Error updating column show:", err);
+      } finally {
+        setUpdatingColumnIds((prev) => prev.filter((id) => id !== cid));
+      }
+    },
+    [queryClient, token, sheetId]
+  );
+
+  // compute portal position when filtersOpen opens; anchor to filtersButtonRef
+  useEffect(() => {
+    if (!filtersOpen || !(filtersButtonRef && filtersButtonRef.current)) return;
+    const computePos = () => {
+      const rect = filtersButtonRef.current.getBoundingClientRect();
+      const top = rect.bottom + 8 + window.scrollY;
+      const width = Math.min(420, Math.max(260, window.innerWidth < 768 ? window.innerWidth * 0.9 : 300));
+      // anchor left to rect.left on narrow, align right edge with button on large
+      let left;
+      if (window.innerWidth < 1024) {
+        left = rect.left;
+      } else {
+        left = rect.right - width;
+      }
+      left = Math.max(8, Math.min(left, window.innerWidth - width - 8));
+      setDropdownStyle({ top, left, width });
+    };
+    computePos();
+    window.addEventListener("resize", computePos);
+    window.addEventListener("scroll", computePos, true);
+    return () => {
+      window.removeEventListener("resize", computePos);
+      window.removeEventListener("scroll", computePos, true);
+    };
+  }, [filtersOpen, filtersButtonRef]);
+
+  // Define filtersPanel so return can reference it safely
+  const filtersPanel = filtersOpen ? (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0, y: -6 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -6 }}
+        transition={{ duration: 0.16, ease: "easeOut" }}
+        ref={filtersPortalRef}
+        style={{
+          position: "fixed",
+          top: dropdownStyle.top,
+          left: dropdownStyle.left,
+          width: dropdownStyle.width,
+          zIndex: 80, // Lower than modals (which are usually 1100+)
+        }}
+      >
+        <div className="bg-black rounded-xl shadow-lg border border-[#2A2A2A] overflow-hidden" style={{ width: "100%" }}>
+          <div className="p-3">
+            <div className="text-white font-semibold mb-2">Columns</div>
+            <div className="max-h-64 overflow-auto custom-scrollbar">
+              {!sheets?.columns?.length ? (
+                <div className="text-gray4 text-sm">No columns</div>
+              ) : (
+                sheets.columns.map((col) => (
+                  <div key={col.id} className="flex items-center justify-between py-2">
+                    <div className="text-sm text-white truncate mr-2">{col.name || col.key}</div>
+                    <div>
+                      <Switch
+                        className="custom-pink-switch"
+                        checked={!!col.show}
+                        loading={updatingColumnIds.includes(col.id)}
+                        onChange={() => toggleColumnShow(col)}
+                        size="small"
+                      />
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </AnimatePresence>
+  ) : null;
   // Handle task reordering (drag and drop)
   const handleOnDragEnd = useCallback(
     (result) => {
@@ -380,7 +501,7 @@ const SheetTabel = ({
       );
       setSelectedTasks([]);
       // attempt to refresh server-side pagination / data in parent if provided
-      try { if (typeof taskRefetch === "function") await taskRefetch(); } catch(_) {}
+      try { if (typeof taskRefetch === "function") await taskRefetch(); } catch (_) { }
     } catch (err) {
       // Optionally handle error
     }
@@ -455,6 +576,26 @@ const SheetTabel = ({
     }
   }, [isCreatingTask, filteredTasks]);
 
+  // Add this effect to close the filters dropdown when clicking outside
+  useEffect(() => {
+    if (!filtersOpen) return;
+    function handleClickOutside(event) {
+      // If the dropdown or the button is not mounted, do nothing
+      if (!filtersPortalRef.current || !filtersButtonRef?.current) return;
+      // If click is inside the dropdown or the button, do nothing
+      if (
+        filtersPortalRef.current.contains(event.target) ||
+        filtersButtonRef.current.contains(event.target)
+      ) {
+        return;
+      }
+      // Otherwise, close the dropdown
+      if (typeof onToggleFilters === "function") onToggleFilters(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [filtersOpen, filtersButtonRef, onToggleFilters]);
+
   if (isLoading) {
     return (
       <div className="mt-[26px]">
@@ -479,6 +620,18 @@ const SheetTabel = ({
 
   return (
     <div className="">
+      {/* inject tiny css override so antd Switch uses main pink color when checked */}
+      <style>{`
+       .custom-pink-switch .ant-switch-checked {
+         background-color: #DC5091 !important;
+         border-color: #DC5091 !important;
+       }
+       .custom-pink-switch .ant-switch-checked:focus {
+         box-shadow: 0 0 0 4px rgba(220,80,145,0.12) !important;
+       }
+     `}</style>
+      {/* render portal into root so layout isn't affected */}
+      {filtersPanel && ReactDOM.createPortal(filtersPanel, (typeof document !== "undefined" && document.getElementById("root")) || document.body)}
       {/* Delete Confirmation Modal for columns */}
       <DeleteConfirmationModal
         isOpen={isDeleteColumnModalOpen}
@@ -527,7 +680,8 @@ const SheetTabel = ({
               {sortedTasksToRender.map((task) => (
                 <div
                   key={task.id}
-                  className="bg-[#23272F] border border-[#2A2D36] rounded-lg p-3 flex items-start justify-between gap-3"
+                  // restore original base + hover pair: base=#23272F, hover=#2A2D36
+                  className="bg-[#23272F] border border-[#2A2D36] rounded-lg p-3 flex items-start justify-between gap-3 hover:bg-[#2A2D36] transition-colors"
                 >
                   <div className="flex items-center gap-3 w-full">
                     {/* Order badge */}
@@ -578,8 +732,8 @@ const SheetTabel = ({
                                     task.priority === "High"
                                       ? "#DC5091"
                                       : task.priority === "Medium"
-                                      ? "#BF7E1C"
-                                      : "#0EC359",
+                                        ? "#BF7E1C"
+                                        : "#0EC359",
                                 }}
                               >
                                 {task.priority}
@@ -753,11 +907,10 @@ const SheetTabel = ({
                           className={`
                         w-5 h-5 rounded border-2 flex items-center justify-center
                         transition-colors duration-150
-                        ${
-                          selectedTasks.length === filteredTasks.length
-                            ? "bg-pink2 border-pink2"
-                            : "bg-[#23272F] border-[#3A3A3A]"
-                        } peer-focus:ring-2 peer-focus:ring-pink2
+                        ${selectedTasks.length === filteredTasks.length
+                              ? "bg-pink2 border-pink2"
+                              : "bg-[#23272F] border-gray4"
+                            } peer-focus:ring-2 peer-focus:ring-pink2
                       `}
                           style={{ zIndex: 1 }}
                         >
@@ -779,13 +932,6 @@ const SheetTabel = ({
                         </span>
                       </label>
                     </td>
-                    <td
-                      className="w-[44px] sm:w-[48px] py-[12px] sm:py-[16px] px-[8px] sm:px-[11px] flex items-center justify-center border-r border-r-[black] cursor-pointer bg-grayDash sticky left-[44px] sm:left-[48px] z-30 top-0"
-                    >
-                      <div className="chat w-[22px] h-[22px] sm:w-[25px] sm:h-[25px] flex items-center justify-center">
-                        <IoMdChatbubbles className="text-gray4 w-[22px] h-[22px] sm:w-[26px] sm:h-[26px]" />
-                      </div>
-                    </td>
                     {/* Draggable Columns + Sticky Add Button */}
                     <td className="flex-grow">
                       <Droppable
@@ -799,42 +945,34 @@ const SheetTabel = ({
                             ref={provided.innerRef}
                             {...provided.droppableProps}
                           >
-                            {sheets?.columns.map((column, index) => {
-                              const showColumn = column.show;
-                              // Make the first data column sticky (third column overall)
-                              const isFirst = index === 0;
+                            {visibleColumns.map((column, vIndex) => {
+                              // vIndex is the index among visible columns (0..n-1)
+                              const isFirstVisible = vIndex === 0;
                               return (
-                                showColumn && (
-                                  <Draggable
-                                    key={column.id}
-                                    draggableId={`column-${column.id}`}
-                                    index={index}
-                                  >
-                                    {(provided) => (
-                                      <Dropdown
-                                        overlay={getColumnMenu(column)}
-                                        trigger={["contextMenu"]}
-                                        placement="bottomLeft"
+                                <Draggable
+                                  key={column.id}
+                                  draggableId={`column-${column.id}`}
+                                  index={vIndex}
+                                >
+                                  {(provided) => (
+                                    <Dropdown
+                                      overlay={getColumnMenu(column)}
+                                      trigger={["contextMenu"]}
+                                      placement="bottomLeft"
+                                    >
+                                      <div
+                                        className={`w-[140px] sm:w-[160px] md:w-[180px] flex items-center justify-between py-[12px] sm:py-[16px] border-r border-[black] px-[8px] sm:px-[11px] hide
+                                        ${isFirstVisible ? "sticky left-[44px] sm:left-[48px] bg-grayDash top-0 z-20" : ""}`}
+                                        ref={provided.innerRef}
+                                        {...provided.draggableProps}
+                                        {...provided.dragHandleProps}
                                       >
-                                        <div
-                                          className={`w-[140px] sm:w-[160px] md:w-[180px] flex items-center justify-between py-[12px] sm:py-[16px] border-r border-[black] px-[8px] sm:px-[11px] hide
-                                        ${
-                                          isFirst
-                                            ? "sticky left-[88px] sm:left-[96px] bg-grayDash top-0 z-20"
-                                            : ""
-                                        }
-                                      `}
-                                          ref={provided.innerRef}
-                                          {...provided.draggableProps}
-                                          {...provided.dragHandleProps}
-                                        >
-                                          {column.name}
-                                          <MdDragIndicator className="text-gray4 cursor-grab" />
-                                        </div>
-                                      </Dropdown>
-                                    )}
-                                  </Draggable>
-                                )
+                                        {column.name}
+                                        <MdDragIndicator className="text-gray4 cursor-grab" />
+                                      </div>
+                                    </Dropdown>
+                                  )}
+                                </Draggable>
                               );
                             })}
 
@@ -871,21 +1009,19 @@ const SheetTabel = ({
                         <tr key={task.id} className="flex border-b border-black ">
                           <SheetTableItem
                             task={task}
-                            columns={sheets?.columns.filter((_, idx) =>
-                              columnOrder.includes(idx)
-                            )}
+                            columns={visibleColumns}
                             index={index}
                             isSelected={selectedTasks.includes(task.id)}
                             onSelect={handleTaskSelect}
                             onEdit={() => setEditingTaskId(task.id)}
                             onChange={handleColumnChange}
                             stickyFirstThreeColumns
-                            onChatIconClick={() => handleOpenChatSidebar(task)}
-                            autoFocus={
-                              task.id === lastCreatedTaskIdRef.current &&
-                              index === 0
-                            }
-                            isDeleting={deletingTaskIds.includes(task.id)}
+                            onOpenChat={() => handleOpenChatSidebar(task)}
+                          autoFocus={
+                            task.id === lastCreatedTaskIdRef.current &&
+                            index === 0
+                          }
+                          isDeleting={deletingTaskIds.includes(task.id)}
                           />
                         </tr>
                       ))}

@@ -278,12 +278,16 @@ html::-webkit-scrollbar-thumb:hover {
 }
 /* stronger selector to override AntD */
 .ant-picker input {
-  color: #353847 !important; /* Tailwind's gray-400 */
+  color: #ffffff !important; /* Tailwind's gray-400 */
+}
+.ant-picker:hover{
+  background-color: transparent !important;
+
 }
 .ant-picker input::placeholder {
-  color: #353847 !important;
+  color: #ffffff !important;
 }
 .ant-picker-suffix,
 .ant-picker-clear {
-  color: #353847 !important; /* Tailwind gray-400 */
+  color: #ffffff !important; /* Tailwind gray-400 */
 }

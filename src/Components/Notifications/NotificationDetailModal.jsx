@@ -94,6 +94,8 @@ const NotificationDetailModal = ({ notificationId, isOpen, onClose }) => {
         null,
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      // Close the modal so dropdowns/modal close after action
+      if (typeof onClose === "function") onClose();
     } catch (error) {
       // Optionally show error
     } finally {

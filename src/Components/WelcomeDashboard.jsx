@@ -168,7 +168,7 @@ const WelcomeDashboard = () => {
           shadow-[0_0_10px_rgba(255,255,255,0.03)] hover:shadow-[0_0_15px_rgba(255,255,255,0.05)] transition-shadow duration-500"
       >
         <div className="">
-          <h1 className="text-2xl font-semibold text-white mb-1">Welcome back, Team! <span className="text-pink2">👋</span></h1>
+          <h1 className="text-2xl font-semibold text-white mb-1">Welcome, Team! <span className="text-pink2">👋</span></h1>
           <p className="text-white/70 text-base">Here's your events overview for today.</p>
         </div>
         <div className="absolute top-0 right-0 w-1/3 h-full opacity-[0.02] bg-gradient-to-l from-white to-transparent"></div>

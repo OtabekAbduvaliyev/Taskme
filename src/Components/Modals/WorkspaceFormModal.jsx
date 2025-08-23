@@ -1,10 +1,18 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { FiX } from 'react-icons/fi';
 import { HiOutlineFolder } from 'react-icons/hi';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const WorkspaceFormModal = ({ isOpen, onClose, isEditing, workspaceName, onWorkspaceNameChange, onSubmit }) => {
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (isOpen && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [isOpen]);
+
   const handleSubmit = (e) => {
     e.preventDefault();
     // Only submit if there's a non-empty, trimmed name
@@ -85,6 +93,7 @@ const WorkspaceFormModal = ({ isOpen, onClose, isEditing, workspaceName, onWorks
                     className="relative group"
                   >
                     <input
+                      ref={inputRef}
                       type="text"
                       name="name"
                       value={workspaceName.name}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { FiMail, FiUserPlus, FiX } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import axiosInstance from "../../AxiosInctance/AxiosInctance";
@@ -17,6 +17,7 @@ const InviteMemberModal = ({ isOpen, onClose }) => {
   const [currentUserEmail, setCurrentUserEmail] = useState("");
   const [showAdminTooltip, setShowAdminTooltip] = useState(false);
   const token = localStorage.getItem("token");
+  const inputRef = useRef(null);
 
   // Fetch available workspaces (exposed so it can be refetched)
   const fetchWorkspaces = async () => {
@@ -243,6 +244,19 @@ const InviteMemberModal = ({ isOpen, onClose }) => {
   // Hide workspace multi-select if view is ALL
   const showWorkspaceSelect = view !== "ALL";
 
+  useEffect(() => {
+    if (isOpen) {
+      // Delay to ensure input is rendered after animation
+      const timer = setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+          inputRef.current.select?.();
+        }
+      }, 250);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen]);
+
   return ReactDOM.createPortal(
     <AnimatePresence>
       {isOpen && (
@@ -311,6 +325,7 @@ const InviteMemberModal = ({ isOpen, onClose }) => {
                   >
                     <FiMail className="absolute left-3 top-1/2 -translate-y-1/2 text-[#777C9D] group-hover:text-pink2 transition-colors" />
                     <input
+                      ref={inputRef}
                       type="email"
                       id="email"
                       value={email}
@@ -481,7 +496,7 @@ const InviteMemberModal = ({ isOpen, onClose }) => {
         </motion.div>
       )}
     </AnimatePresence>,
-        document.getElementById("modal-root") // 👈 goes outside main layout
+    document.getElementById("modal-root") // 👈 goes outside main layout
   );
 };
 

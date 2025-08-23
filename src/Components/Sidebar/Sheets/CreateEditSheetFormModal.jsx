@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useState, useEffect } from "react";
+import React, { useCallback, useContext, useState, useEffect, useRef } from "react";
 import ReactDOM from "react-dom";
 import { AuthContext } from "../../../Auth/AuthContext";
 import { useParams } from "react-router-dom";
@@ -100,6 +100,8 @@ const CreateSheetFormModal = ({
   });
   const { createSheet } = useContext(AuthContext);
   const [loading, setLoading] = useState(false); // Add loading state
+  const inputRef = useRef(null);
+  const columnsEndRef = useRef(null);
 
   // Add useEffect to keep sheet.name in sync when editing
   useEffect(() => {
@@ -121,6 +123,12 @@ const CreateSheetFormModal = ({
     }
   }, [isOpen, isEditing, editingSheetName, id]);
 
+  useEffect(() => {
+    if (isOpen && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [isOpen]);
+
   const handleAddColumn = () => {
     setColumns([
       ...columns,
@@ -133,6 +141,13 @@ const CreateSheetFormModal = ({
       },
     ]);
   };
+
+  // Scroll to bottom when columns length changes (new column added)
+  useEffect(() => {
+    if (columnsEndRef.current) {
+      columnsEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [columns.length]);
 
   const handleColumnChange = (index, key, value) => {
     const updatedColumns = [...columns];
@@ -400,6 +415,7 @@ const CreateSheetFormModal = ({
                     className="relative group"
                   >
                     <input
+                      ref={inputRef}
                       type="text"
                       name="name"
                       value={sheet.name}
@@ -549,6 +565,8 @@ const CreateSheetFormModal = ({
                           )}
                         </motion.div>
                       ))}
+                      {/* Scroll anchor */}
+                      <div ref={columnsEndRef} />
                     </div>
                   </div>
                 )}

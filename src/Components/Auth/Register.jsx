@@ -14,6 +14,7 @@ const Register = () => {
     password: "",
   });
   const [showPassword, setShowPassword] = useState(false);
+  const [agree, setAgree] = useState(false);
   const { register, loading } = useContext(AuthContext);
 
   const handleChange = (e) => {
@@ -22,6 +23,7 @@ const Register = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (!agree) return; // Prevent submit if not agreed
     register(credentials);
   };
 
@@ -34,7 +36,6 @@ const Register = () => {
             Register
           </h1>
           <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-
             {/* First Name */}
             <div>
               <label htmlFor="firstName" className="text-[#777C9D] text-lg font-semibold mb-2 block">
@@ -129,10 +130,33 @@ const Register = () => {
               </div>
             </div>
 
+            {/* Terms of Policy Agreement */}
+            <div className="flex items-center gap-2 mt-2">
+              <input
+                id="agree"
+                type="checkbox"
+                checked={agree}
+                onChange={e => setAgree(e.target.checked)}
+                className="accent-pink2 w-5 h-5 rounded border-gray4 bg-gray3 focus:ring-pink2"
+                required
+              />
+              <label htmlFor="agree" className="text-white2 text-sm">
+                I agree to the{" "}
+                <Link
+                  to="/terms"
+                  className="text-pink2 hover:underline font-semibold"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Terms of Policy
+                </Link>
+              </label>
+            </div>
+
             <button
               type="submit"
-              className="h-14 w-full bg-gradient-to-r from-pink2 to-pink2/90 text-white rounded-xl text-lg font-bold hover:shadow-lg hover:shadow-pink2/20 transition relative overflow-hidden group"
-              disabled={loading}
+              className={`h-14 w-full bg-gradient-to-r from-pink2 to-pink2/90 text-white rounded-xl text-lg font-bold hover:shadow-lg hover:shadow-pink2/20 transition relative overflow-hidden group ${!agree ? "opacity-60 cursor-not-allowed" : ""}`}
+              disabled={loading || !agree}
             >
               <span className="relative z-10">{loading ? "Loading..." : "Register"}</span>
               <div className="absolute inset-0 bg-gradient-to-r from-pink2/0 via-white/20 to-pink2/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />

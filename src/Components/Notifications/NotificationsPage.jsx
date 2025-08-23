@@ -136,8 +136,10 @@ const NotificationsPage = () => {
         )
       );
 
-      // Mark notification as read
-      markAsRead(notification.id);
+      // Mark notification as read and close modal/dropdown
+      await markAsRead(notification.id);
+      setShowDetailModal(false);
+      setSelectedNotificationId(null);
     } catch (error) {
       console.error("Error handling invitation:", error);
     }
@@ -239,6 +241,8 @@ const NotificationsPage = () => {
                   onClick={() => {
                     setSelectedNotificationId(notification.id);
                     setShowDetailModal(true);
+                    // mark read immediately so unread badge/count disappears
+                    if (!notification.isRead) markAsRead(notification.id);
                   }}
                 >
                   <div className="mt-1 flex-shrink-0">
@@ -303,7 +307,10 @@ const NotificationsPage = () => {
       <NotificationDetailModal
         notificationId={selectedNotificationId}
         isOpen={showDetailModal}
-        onClose={() => setShowDetailModal(false)}
+        onClose={() => {
+          setShowDetailModal(false);
+          setSelectedNotificationId(null);
+        }}
       />
     </div>
   );

@@ -14,6 +14,9 @@ import WelcomeDashboard from './Components/WelcomeDashboard';
 import NotificationsPage from './Components/Notifications/NotificationsPage';
 import Settings from './Components/Settings/Settings';
 import AdminDashboard from './Pages/Admin/AdminDashboard';
+import TermsofPolicy from './Components/Auth/TermsofPolicy';
+import MembersPage from './Pages/Members';
+import ViewersPage from './Pages/Viewers';
 
 const App = () => {
   const router = createBrowserRouter([
@@ -23,27 +26,27 @@ const App = () => {
     },
     {
       path: "/register",
-      element:<AuthProvider><Register /></AuthProvider> ,
+      element: <AuthProvider><Register /></AuthProvider>,
     },
     {
       path: "/login",
-      element:<AuthProvider><SignIn /></AuthProvider> ,
+      element: <AuthProvider><SignIn /></AuthProvider>,
     },
     {
       path: "/verification",
-      element:<AuthProvider><Verification /></AuthProvider> ,
+      element: <AuthProvider><Verification /></AuthProvider>,
     },
     {
       path: "/reset-password",
-      element:<AuthProvider><RestoreVerification /></AuthProvider> ,
+      element: <AuthProvider><RestoreVerification /></AuthProvider>,
     },
     {
       path: "/createcompany",
-      element:<AuthProvider><ProtectedRoute element={<CreateCompany />} /></AuthProvider> ,
+      element: <AuthProvider><ProtectedRoute element={<CreateCompany />} /></AuthProvider>,
     },
     {
       path: "/subscriptions",
-      element:<AuthProvider><ProtectedRoute element={<Subscriptions />} /></AuthProvider> ,
+      element: <AuthProvider><ProtectedRoute element={<Subscriptions />} /></AuthProvider>,
     },
     {
       path: "/settings",
@@ -55,11 +58,19 @@ const App = () => {
     },
     {
       path: "/dashboard",
-      element:<AuthProvider><ProtectedRoute element={<Dashboard />} /></AuthProvider> ,
-      children:[
+      element: <AuthProvider><ProtectedRoute element={<Dashboard />} /></AuthProvider>,
+      children: [
         {
-          path:'/dashboard',
-          element:<AuthProvider><ProtectedRoute element={<WelcomeDashboard />} /></AuthProvider>
+          path: '/dashboard',
+          element: <AuthProvider><ProtectedRoute element={<WelcomeDashboard />} /></AuthProvider>
+        },
+        {
+          path: "/dashboard/members",
+          element: <AuthProvider> <ProtectedRoute element={<MembersPage />} /></AuthProvider>,
+        },
+        {
+          path: "/dashboard/viewers",
+          element: <AuthProvider> <ProtectedRoute element={<ViewersPage />} /></AuthProvider>,
         },
         {
           path: "/dashboard/workspace/:id",
@@ -75,6 +86,10 @@ const App = () => {
       path: "/admin",
       element: <AuthProvider><ProtectedRoute element={<AdminDashboard />} /></AuthProvider>,
       // You can add children routes here if needed, similar to dashboard
+    },
+    {
+      path: "/terms",
+      element: <TermsofPolicy />,
     },
   ]);
   return (

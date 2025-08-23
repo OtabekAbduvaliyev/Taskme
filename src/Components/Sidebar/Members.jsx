@@ -3,9 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import testMemImg from "../../assets/default-avatar-icon-of-social-media-user-vector.jpg";
 import InviteMemberModal from "../Modals/InviteMemberModal";
 import axiosInstance from "../../AxiosInctance/AxiosInctance";
+import { useNavigate } from "react-router-dom";
 
 const Members = ({ role }) => {
+  const navigate = useNavigate();
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  // local showAll kept only for internal layout measurement; navigation opens full page
   const [showAll, setShowAll] = useState(false);
   const token = localStorage.getItem("token");
 
@@ -25,7 +28,7 @@ const Members = ({ role }) => {
           Authorization: `Bearer ${token}`,
         },
       });
-      return response.data;
+      return response.data.members;
     },
     enabled: role != "member" && !!token,
     staleTime: 300000,
@@ -74,19 +77,21 @@ const Members = ({ role }) => {
             {members.length > 2 && (
               <button
                 className="text-white text-[12px] sm:text-[13px] bg-black py-[7px] px-[15px] rounded-[9px]"
-                onClick={() => setShowAll(!showAll)}
+                onClick={() => navigate("/dashboard/members")}
+                title="See all members"
               >
-                {showAll ? "show less" : "see all"}
+                See All
               </button>
             )}
           </div>
 
-          {/* When expanded, constrain this container to show 3 items and make it scrollable */}
+          {/* When the sidebar shows a truncated list, keep same layout.
+              Full list is rendered on the dedicated Members page at /dashboard/members */}
           <div
             className="secLine my-[12px] space-y-[4px]"
             style={{
-              maxHeight: showAll ? `${containerHeight ?? 150}px` : undefined,
-              overflowY: showAll ? "auto" : undefined,
+              maxHeight: undefined,
+              overflowY: undefined,
             }}
           >
             {displayedMembers.length > 0 ? (
@@ -135,7 +140,7 @@ const Members = ({ role }) => {
                 </div>
               ))
             ) : (
-              <div className="text-gray2 text-center py-4">No members found</div>
+              <div className="text-gray2 text-center py-4">Members not exist yet</div>
             )}
           </div>
         </div>

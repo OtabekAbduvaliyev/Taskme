@@ -29,8 +29,8 @@ const SheetTableItem = ({
   index,
   isSelected,
   onSelect,
+  onOpenChat, // <-- new prop to open chat sidebar for this task
   stickyFirstThreeColumns,
-  onChatIconClick,
   autoFocus, // <-- new prop
   isDeleting = false, // new prop to indicate deletion in progress
 }) => {
@@ -49,12 +49,18 @@ const SheetTableItem = ({
       return;
     }
 
-    // Single date fields -> send single "YYYY-MM-DD" string
+    // Single date fields -> send ISO datetime string (e.g. 2025-08-23T14:30:00.000Z)
     if (/^date[1-5]$/i.test(key)) {
-      const value =
-        e && typeof e === "object" && typeof e.format === "function"
-          ? e.format("YYYY-MM-DD")
-          : "";
+      const toIso = (val) => {
+        if (!val) return "";
+        try {
+          if (typeof val.toISOString === "function") return val.toISOString();
+          return dayjs(val).toISOString();
+        } catch {
+          try { return new Date(val).toISOString(); } catch { return ""; }
+        }
+      };
+      const value = e && typeof e === "object" ? toIso(e) : "";
       onChange(task.id, taskKey, value);
       return;
     }
@@ -226,8 +232,8 @@ const SheetTableItem = ({
         },
       });
 
-            // get server-returned files (if API returns them) and notify parent/sidebar via event
-const returned = Array.isArray(res?.data?.data)
+      // get server-returned files (if API returns them) and notify parent/sidebar via event
+      const returned = Array.isArray(res?.data?.data)
         ? res.data.data
         : Array.isArray(res?.data?.files)
           ? res.data.files
@@ -250,14 +256,14 @@ const returned = Array.isArray(res?.data?.data)
         }
       }
 
-    // --- NEW: merge returned files into localFiles for immediate UI update ---
-    if (Array.isArray(returned) && returned.length) {
-      setLocalFiles(prev => {
-        const existingIds = new Set(prev.map(f => f.id));
-        const newFiles = returned.filter(f => f && f.id && !existingIds.has(f.id));
-        return newFiles.length ? [...newFiles, ...prev] : prev;
-      });
-    }
+      // --- NEW: merge returned files into localFiles for immediate UI update ---
+      if (Array.isArray(returned) && returned.length) {
+        setLocalFiles(prev => {
+          const existingIds = new Set(prev.map(f => f.id));
+          const newFiles = returned.filter(f => f && f.id && !existingIds.has(f.id));
+          return newFiles.length ? [...newFiles, ...prev] : prev;
+        });
+      }
 
       // mark done and notify parent to refresh files
       setUploadQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, status: "done", progress: 100, cancelSource: undefined } : q)));
@@ -285,7 +291,7 @@ const returned = Array.isArray(res?.data?.data)
       return {
         id,
         file,
-        preview: /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(file.name) ? URL.createObjectURL(file) : null,
+        preview: /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(file.name) ? null : URL.createObjectURL(file),
         size: file.size,
         progress: 0,
         status: isTooLarge ? "error" : "queued",
@@ -482,7 +488,7 @@ const returned = Array.isArray(res?.data?.data)
       { value: "In Progress", label: "In Progress", bg: "#BF7E1C" },
       { value: "Done", label: "Done", bg: "#0EC359" },
     ],
-    priority:[
+    priority: [
 
     ]
     // add other keys here if you want mapped selects, e.g. stage, progress...
@@ -520,7 +526,7 @@ const returned = Array.isArray(res?.data?.data)
         }
       }
 
-      
+
     });
 
     if (updates.length) {
@@ -720,6 +726,10 @@ const returned = Array.isArray(res?.data?.data)
                             <SketchPicker
                               color={addOptionColor}
                               onChange={color => setAddOptionColor(color.hex)}
+                              onChangeComplete={color => {
+                                setAddOptionColor(color.hex);
+                                setShowColorPicker(false); // close after selection
+                              }}
                               presetColors={[
                                 "#801949", "#0EC359", "#BF7E1C", "#DC5091", "#FFFFFF", "#23272F"
                               ]}
@@ -756,8 +766,15 @@ const returned = Array.isArray(res?.data?.data)
             typeof window !== "undefined" &&
             document.getElementById("root") &&
             ReactDOM.createPortal(
-              <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black bg-opacity-40">
-                <div className="bg-grayDash rounded-lg shadow-lg p-6 w-full max-w-[400px] relative">
+              <div
+                className="fixed inset-0 z-[10000] flex items-center justify-center bg-black bg-opacity-40"
+                onClick={closeManageOptionsModal} // close when clicking outside modal
+              >
+                {/* stop propagation so clicks inside dialog don't close it */}
+                <div
+                  className="bg-grayDash rounded-lg shadow-lg p-6 w-full max-w-[400px] relative"
+                  onClick={(e) => e.stopPropagation()} // prevent overlay click handler
+                >
                   <div className="flex justify-between items-center mb-4">
                     <div className="font-bold text-lg text-white">Manage Options</div>
                     <button
@@ -796,42 +813,45 @@ const returned = Array.isArray(res?.data?.data)
                               }));
                             }}
                           />
-                          {editOptions[opt.id] && (
-                            <div
-                              className="absolute left-0"
-                              style={{
-                                top: "110%",
-                                zIndex: 100,
-                                minWidth: 0,
-                                minHeight: 0,
-                                background: "transparent"
-                              }}
-                            >
-                              {/* Overlay for closing the picker */}
+                          {/* Replace inline picker (which could be clipped) with a portal-mounted fixed overlay + centered picker */}
+                          {editOptions[opt.id] && typeof window !== "undefined" && document.getElementById("root") && ReactDOM.createPortal(
+                            <div>
+                              {/* overlay to catch outside clicks and prevent background scrolling interactions */}
                               <div
                                 className="fixed inset-0"
-                                style={{ zIndex: 99 }}
-                                onClick={() =>
-                                  setEditOptions(prev => ({
-                                    ...prev,
-                                    [opt.id]: false
-                                  }))
-                                }
+                                style={{ zIndex: 10001 }} // <- raised above modal z-[10000]
+                                onClick={() => setEditOptions(prev => ({ ...prev, [opt.id]: false }))}
                               />
-                              <div style={{ position: "relative", zIndex: 100 }}>
+                              {/* fixed picker container placed above the modal */}
+                              <div
+                                className="fixed"
+                                style={{
+                                  zIndex: 10002, // <- raised above modal z-[10000]
+                                  top: "50%",
+                                  left: "50%",
+                                  transform: "translate(-50%,-50%)"
+                                }}
+                                onClick={e => e.stopPropagation()}
+                              >
                                 <SketchPicker
                                   color={opt.editColor}
                                   onChange={color =>
                                     handleEditOptionChange(opt.id, "editColor", color.hex)
                                   }
+                                  onChangeComplete={color => {
+                                    // apply final color and close the picker
+                                    handleEditOptionChange(opt.id, "editColor", color.hex);
+                                    setEditOptions(prev => ({ ...prev, [opt.id]: false }));
+                                  }}
                                   presetColors={[
                                     "#801949", "#0EC359", "#BF7E1C", "#DC5091", "#FFFFFF", "#23272F"
                                   ]}
                                   disableAlpha
-                                  width={180}
+                                  width={220}
                                 />
                               </div>
-                            </div>
+                            </div>,
+                            document.getElementById("root")
                           )}
                         </div>
                         <button
@@ -865,14 +885,14 @@ const returned = Array.isArray(res?.data?.data)
       ["date1", "date2", "date3", "date4", "date5"].includes(lowerKey)
     ) {
       const dateValue = task[lowerKey] ? dayjs(task[lowerKey]) : null;
-      // const placeholder = isDueDateKey || lowerType === "DUEDATE" ? "Select due date" : "Select date";
       return (
         <AntdDatePicker
+          showTime
           value={dateValue}
           onChange={(date) => handleInputChange(lowerKey, date)}
-          format="YYYY-MM-DD"
+          format="YYYY-MM-DD HH:mm"
           className="w-full bg-grayDash text-white text-[18px] rounded px-2 py-1"
-          placeholder={'enetr'}
+          placeholder={'Select date & time'}
           allowClear
         />
       );
@@ -880,19 +900,20 @@ const returned = Array.isArray(res?.data?.data)
 
     // Date/duedate range fields (array of [start, end])
     if (["duedate1", "duedate2", "duedate3", "duedate4", "duedate5"].includes(lowerKey)) {
-      // Always expect/store as ["YYYY-MM-DD", "YYYY-MM-DD"]
+      // Always expect/store as ISO datetime strings: ["isoStart","isoEnd"]
       const rangeValue = Array.isArray(task[lowerKey]) && task[lowerKey].length === 2
         ? [
           task[lowerKey][0] ? dayjs(task[lowerKey][0]) : null,
           task[lowerKey][1] ? dayjs(task[lowerKey][1]) : null,
         ]
         : [null, null];
-      const placeholder = ["Start due date", "End due date"];
+      const placeholder = ["Start due date & time", "End due date & time"];
       return (
         <AntdRangePicker
           value={rangeValue}
           onChange={(dates) => handleInputChange(lowerKey, dates)}
-          format="YYYY-MM-DD"
+          showTime={{ format: 'HH:mm' }}
+          format="YYYY-MM-DD HH:mm"
           className="w-full bg-grayDash !text-white text-[18px] rounded px-2 py-1 "
           placeholder={placeholder}
           allowClear
@@ -923,7 +944,7 @@ const returned = Array.isArray(res?.data?.data)
               className={`
                 w-5 h-5 rounded border-2 flex items-center justify-center
                 transition-colors duration-150
-                ${checked ? "bg-pink2 border-pink2" : "bg-[#23272F] border-[#3A3A3A]"}
+                ${checked ? "bg-pink2 border-pink2" : "bg-[#23272F] border-gray4"}
                 peer-focus:ring-2 peer-focus:ring-pink2
               `}
               style={{ zIndex: 1 }}
@@ -1057,8 +1078,16 @@ const returned = Array.isArray(res?.data?.data)
             )}
           </div>
           {showMemberModal && (
-            <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black bg-opacity-40">
-              <div className="bg-grayDash rounded-lg shadow-lg p-4 w-full max-w-[400px] min-h-[220px]">
+            // overlay closes modal on outside click
+            <div
+              className="fixed inset-0 z-[10000] flex items-center justify-center bg-black bg-opacity-40"
+              onClick={() => setShowMemberModal(false)}
+            >
+              {/* stop propagation so clicks inside dialog don't close it */}
+              <div
+                className="bg-grayDash rounded-lg shadow-lg p-4 w-full max-w-[400px] min-h-[220px]"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <div className="flex justify-between items-center mb-4">
                   <div className="font-bold text-lg text-white">
                     Select Members
@@ -1247,18 +1276,24 @@ const returned = Array.isArray(res?.data?.data)
     );
   };
 
+  // determine first visible column key (we'll show chat button inside that column)
+  const firstVisibleColumnKeyLower = Array.isArray(columns)
+    ? (columns.find((c) => c && c.show)?.key || "").toString().toLowerCase()
+    : "";
+
   return (
     <Draggable draggableId={task.id.toString()} index={index}>
       {(provided) => (
         <tr
-          className={`task flex text-white border-[black] font-radioCanada ${isDeleting ? "opacity-60 pointer-events-none" : ""}`}
-           ref={provided.innerRef}
-           {...provided.draggableProps}
-           {...provided.dragHandleProps}
-         >
+          // row controls hover color; cells use group-hover to respond
+          className={`task flex text-white border-[black] font-radioCanada group hover:bg-[#2A2D36] transition-colors ${isDeleting ? "opacity-60 pointer-events-none" : ""}`}
+          ref={provided.innerRef}
+          {...provided.draggableProps}
+          {...provided.dragHandleProps}
+        >
           {/* Sticky checkbox cell */}
-          <td className="w-[48px] py-[16px] px-[11px] flex items-center justify-center border-r border-r-[black] sticky left-0 bg-grayDash z-20">
-            <label className="relative flex items-center cursor-pointer select-none w-[20px] h-[20px]">
+          <td className="w-[48px] py-[16px] px-[11px] flex items-center justify-center border-r border-r-[black] sticky left-0 bg-grayDash group-hover:bg-[#2A2D36] z-20">
+            <label className="relative flex items-center cursor-pointer select-none w-[20px] h-[20px] text-gray4">
               <input
                 type="checkbox"
                 checked={isSelected}
@@ -1273,7 +1308,7 @@ const returned = Array.isArray(res?.data?.data)
                 className={`
                   w-5 h-5 rounded border-2 flex items-center justify-center
                   transition-colors duration-150
-                  ${isSelected ? "bg-pink2 border-pink2" : "bg-[#23272F] border-[#3A3A3A]"}
+                  ${isSelected ? "bg-pink2 border-pink2" : "bg-[#23272F] border-gray4"}
                   peer-focus:ring-2 peer-focus:ring-pink2
                 `}
                 style={{ zIndex: 1 }}
@@ -1292,295 +1327,321 @@ const returned = Array.isArray(res?.data?.data)
               </span>
             </label>
           </td>
-          {/* Sticky chat cell */}
-          <td className="chat w-[48px] py-[16px] px-[11px] flex items-center justify-center border-r border-r-[black] sticky left-[48px] bg-grayDash z-20">
-            <div
-              className="cursor-pointer w-[20px] h-[20px] flex items-center justify-center"
-              onClick={(e) => {
-                e.stopPropagation();
-                onChatIconClick && onChatIconClick(task);
-              }}
-            >
-              <IoMdChatbubbles className="text-gray4 w-[30px] h-[30px]" />
-            </div>
-          </td>
+
           {/* Order cell - shows numeric order for the task */}
+          {columns?.map(
+            (column, idx) =>
+              column.show && (() => {
+                // decide if this cell should host the chat overlay:
+                const isChatColumn = firstVisibleColumnKeyLower
+                  ? String(column.key || "").toLowerCase() === firstVisibleColumnKeyLower
+                  : false;
 
-           {columns?.map(
-             (column, idx) =>
-               column.show && (
-                 <td
-                   key={idx}
-                   className={`w-[180px] flex items-center justify-between py-[16px] border-r border-r-[black] px-[11px]${stickyFirstThreeColumns && idx === 0
-                       ? " sticky left-[96px] z-10 bg-grayDash"
-                       : ""
-                     }`}
-                   onClick={() => onEdit && onEdit()}
-                 >
-                   {renderField(column.key, column.type, column, idx)}
-                 </td>
-               )
-           )}
-
-          {/* Files default column (before Last update) */}
-          <td className="w-[140px] sm:w-[160px] md:w-[180px] flex items-center py-[16px] border-r border-r-[black] px-[11px] overflow-visible">
-            {renderFilesCell()}
-          </td>
-
-          {/* New default column: Last update (avatar, name/email, timestamp) */}
-          <td className="w-[180px] flex items-center gap-3 py-[16px] border-r border-r-[black] px-[11px]">
-            {(() => {
-              const lastUser = task?.lastUpdatedByUser || null;
-              const avatarPath = lastUser?.avatar?.path
-                ? getFileUrl({ path: lastUser.avatar.path })
-                : testMemImg;
-              const displayName = lastUser
-                ? `${lastUser.firstName || ""} ${lastUser.lastName || ""}`.trim() || lastUser.email || "User"
-                : "—";
-              const time = task?.updatedAt || task?.updatedAt || task?.updatedAt;
-              const formatted = time ? dayjs(time).format("MMM D, HH:mm") : "";
-              return (
-                <div className="flex items-center w-full">
-                  <img
-                    src={avatarPath}
-                    alt={lastUser?.firstName || "User"}
-                    className="w-8 h-8 rounded-full object-cover border-2 border-[#23272F] flex-shrink-0"
-                  />
-                  <div className="flex-1 ml-3 min-w-0">
-                    <div className="text-white text-sm truncate">{displayName}</div>
-                    {/* show deleting marker when applicable */}
-                    {isDeleting ? (
-                      <div className="text-yellow-300 text-xs">Deleting...</div>
-                    ) : (
-                      <div className="text-gray4 text-xs">{formatted}</div>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
-          </td>
-
-          {/* File preview modal (portal) - shows all files, allows select, download, delete */}
-          {showFileModal &&
-            typeof window !== "undefined" &&
-            document.getElementById("root") &&
-            ReactDOM.createPortal(
-              <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black bg-opacity-50 p-4">
-                <div className="bg-grayDash rounded-lg shadow-lg w-full max-w-[900px] overflow-hidden">
-                  <div className="flex justify-between items-center p-4 border-b border-[#2A2D36]">
-                    <div className="flex items-center gap-3">
-                      <div className="text-white font-semibold">Files</div>
-                      <div className="flex items-center bg-[#1f1f1f] rounded overflow-hidden text-sm">
-                        <button
-                          className={`px-3 py-1 ${modalTab === "preview" ? "bg-pink2 text-white" : "text-gray4"}`}
-                          onClick={() => setModalTab("preview")}
-                        >
-                          Preview
-                        </button>
-                        <button
-                          className={`px-3 py-1 ${modalTab === "upload" ? "bg-pink2 text-white" : "text-gray4"}`}
-                          onClick={() => setModalTab("upload")}
-                        >
-                          Upload
-                        </button>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        className="text-gray4 p-2 rounded hover:bg-[#2A2D36]"
-                        onClick={() => setShowFileModal(false)}
-                      >
-                        <IoClose />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col md:flex-row gap-4 p-4">
-                    {/* Left pane: preview OR upload UI based on tab */}
-                    {modalTab === "preview" ? (
-                      <div className="flex-shrink-0 w-full md:w-2/3 flex items-center justify-center bg-[#23272F] border border-[#2A2D36] rounded p-3 overflow-auto">
-                        {Array.isArray(localFiles) && localFiles.length > 0 ? (
-                          (() => {
-                            const f = localFiles[selectedFileIndex] || localFiles[0];
-                            const isImage = /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(f.path || "");
-                            return isImage ? (
-                              <img
-                                src={getFileUrl(f)}
-                                alt={f.path?.split?.("/").pop?.() || "preview"}
-                                className="max-h-[70vh] max-w-full object-contain"
-                              />
-                            ) : (
-                              <div className="flex flex-col items-center text-gray4">
-                                <FaRegFileAlt className="w-20 h-20 mb-2" />
-                                <div className="text-sm">{f.path?.split?.("/").pop() || f.id}</div>
-                              </div>
-                            );
-                          })()
-                        ) : (
-                          <div className="flex flex-col items-center text-gray4">
-                            <FaRegFileAlt className="w-12 h-12 mb-2" />
-                            <div className="text-sm">No files</div>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div
-                        className="flex-shrink-0 w-full md:w-2/3 bg-[#23272F] border border-[#2A2D36] rounded p-3"
-                        onDrop={handleDrop}
-                        onDragOver={handleDragOver}
-                      >
-                        <div className="border-2 border-dashed border-[#2A2D36] rounded-lg p-4 mb-4 flex flex-col items-center gap-3">
-                          <div className="text-white font-semibold">Drag & drop files here</div>
-                          <div className="text-gray4 text-sm">or click to select files. Max: <span className="text-white">{formatMaxSize()}</span></div>
-                          <label className="inline-flex items-center gap-2 cursor-pointer mt-2">
-                            <div className="px-3 py-2 bg-pink2 text-white rounded-md font-medium">Select files</div>
-                            <input type="file" multiple onChange={handleFileChange} className="hidden" />
-                          </label>
+                // base classes (sticky left for the first visible column if requested)
+                const baseSticky = stickyFirstThreeColumns && idx === 0 ? " sticky left-[48px] z-10 bg-grayDash" : "";
+                // For chat column: place chat button as inline sibling next to the input
+                if (isChatColumn) {
+                  return (
+                    <td
+                      key={idx}
+                      className={`w-[180px] py-[16px] border-r border-r-[black] px-[11px]${baseSticky} group-hover:bg-[#2A2D36]`}
+                      onClick={() => onEdit && onEdit()}
+                    >
+                      <div className="flex items-center gap-2">
+                        {/* field takes remaining space */}
+                        <div className="flex-1 min-w-0">
+                          {renderField(column.key, column.type, column, idx)}
                         </div>
 
-                        {/* Upload queue */}
-                        {uploadQueue.length > 0 && (
-                          <div className="mb-2">
-                            <div className="text-white font-semibold mb-2">Upload queue</div>
-                            <div className="flex flex-col gap-2">
-                              {uploadQueue.map((q) => (
-                                <div key={q.id} className="flex items-center gap-3 bg-[#1F1F1F] rounded-lg px-3 py-2">
-                                  <div className="w-12 h-12 rounded overflow-hidden bg-[#111] flex items-center justify-center border border-[#2A2D36]">
-                                    {q.preview ? <img src={q.preview} alt={q.file.name} className="w-full h-full object-cover" /> : <FaRegFileAlt className="text-pink2 w-6 h-6" />}
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <div className="text-white truncate">{q.file.name}</div>
-                                    <div className="flex items-center gap-3 mt-1">
-                                      <div className="h-2 bg-[#2A2D36] rounded-md flex-1 overflow-hidden">
-                                        <div style={{ width: `${q.progress}%` }} className={`h-2 bg-pink2 rounded-md transition-all`} />
-                                      </div>
-                                      <div className="text-xs text-gray4 whitespace-nowrap">{q.progress}%</div>
-                                      <div className="text-xs text-gray4">· {formatBytes(q.size)}</div>
-                                    </div>
-                                    {q.status === "error" && (
-                                      <div className="text-xs text-red-500 mt-1">
-                                        {q.error || "Upload failed"}
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-2 ml-2">
-                                    {q.status === "uploading" ? (
-                                      <>
-                                        <button className="text-gray4 px-2 py-1 rounded" title="Uploading" disabled>…</button>
-                                        <button onClick={() => cancelUpload(q.id)} className="text-red-500 px-2 py-1 rounded" title="Cancel">Cancel</button>
-                                      </>
-                                    ) : q.status === "queued" ? (
-                                      <button onClick={() => cancelUpload(q.id)} className="text-red-500 px-2 py-1 rounded" title="Cancel">Cancel</button>
-                                    ) : q.status === "error" ? (
-                                      <>
-                                        <button onClick={() => uploadSingle(q)} className="text-yellow-400 px-2 py-1 rounded" title="Retry">Retry</button>
-                                        <button onClick={() => cancelUpload(q.id)} className="text-red-500 px-2 py-1 rounded" title="Remove">Remove</button>
-                                      </>
-                                    ) : null}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                        {/* chat button sits next to input; revealed on row hover */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenChat && onOpenChat(task);
+                          }}
+                          title="Open chat"
+                          aria-label="Open chat"
+                          // default icon color pink, still white on hover; revealed on row hover
+                          className="opacity-0 group-hover:opacity-100 transition-opacity text-white hover:text-pink2 bg-transparent p-1 rounded flex-shrink-0"
+                        >
+                          <IoMdChatbubbles className="w-[18px] h-[18px]" />
+                        </button>
                       </div>
-                    )}
+                    </td>
+                  );
+                }
 
-                    {/* Right pane: files list / actions (use localFiles) */}
-                    <div className="flex-1 flex flex-col gap-3">
-                      <div className="flex-1 overflow-y-auto max-h-[60vh] p-1">
-                        <div className="grid grid-cols-3 gap-2">
-                          {Array.isArray(localFiles) && localFiles.length > 0 ? (
-                            localFiles.map((f, idx) => {
-                              const url = getFileUrl(f);
-                              const filename = f.path?.split?.("/").pop() || f.id;
-                              const isImage = /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(f.path || "");
-                              return (
-                                // make the thumbnail a group so delete button appears on hover
-                                <div key={f.id || idx} className="relative group">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedFileIndex(idx);
-                                      setModalTab("preview");
-                                    }}
-                                    className={`w-full h-24 rounded border overflow-hidden bg-[#23272F] flex items-center justify-center transition ${selectedFileIndex === idx ? "border-pink2 ring-2 ring-pink2" : "border-[#2A2D36]"}`}
-                                  >
-                                    {isImage ? (
-                                      <img src={url} alt={filename} className="w-full h-full object-cover" />
-                                    ) : (
-                                      <div className="flex flex-col items-center text-gray4">
-                                        <FaRegFileAlt className="w-6 h-6" />
-                                        <div className="text-xs mt-1 truncate">{filename}</div>
-                                      </div>
-                                    )}
-                                  </button>
+                // non-chat columns: render as before
+                return (
+                  <td
+                    key={idx}
+                    className={`w-[180px] flex items-center justify-between py-[16px] border-r border-r-[black] px-[11px]${baseSticky} group-hover:bg-[#2A2D36]`}
+                    onClick={() => onEdit && onEdit()}
+                  >
+                    <div className="w-full">
+                      {renderField(column.key, column.type, column, idx)}
+                    </div>
+                  </td>
+                );
+              })()
+          )}
+ 
+          {/* Files default column (before Last update) */}
+          <td className="w-[140px] sm:w-[160px] md:w-[180px] flex items-center py-[16px] border-r border-r-[black] px-[11px] overflow-visible group-hover:bg-[#2A2D36]">
+             {renderFilesCell()}
+           </td>
+ 
+          {/* New default column: Last update (avatar, name/email, timestamp) */}
+          <td className="w-[180px] flex items-center gap-3 py-[16px] border-r border-r-[black] px-[11px] group-hover:bg-[#2A2D36]">
+             {(() => {
+               const lastUser = task?.lastUpdatedByUser || null;
+               const avatarPath = lastUser?.avatar?.path
+                 ? getFileUrl({ path: lastUser.avatar.path })
+                 : testMemImg;
+               const displayName = lastUser
+                 ? `${lastUser.firstName || ""} ${lastUser.lastName || ""}`.trim() || lastUser.email || "User"
+                 : "—";
+               const time = task?.updatedAt || task?.updatedAt || task?.updatedAt;
+               const formatted = time ? dayjs(time).format("MMM D, HH:mm") : "";
+               return (
+                 <div className="flex items-center w-full">
+                   <img
+                     src={avatarPath}
+                     alt={lastUser?.firstName || "User"}
+                     className="w-8 h-8 rounded-full object-cover border-2 border-[#23272F] flex-shrink-0"
+                   />
+                   <div className="flex-1 ml-3 min-w-0">
+                     <div className="text-white text-sm truncate">{displayName}</div>
+                     {/* show deleting marker when applicable */}
+                     {isDeleting ? (
+                       <div className="text-yellow-300 text-xs">Deleting...</div>
+                     ) : (
+                       <div className="text-gray4 text-xs">{formatted}</div>
+                     )}
+                   </div>
+                 </div>
+               );
+             })()}
+           </td>
 
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      deleteFileDirect(f);
-                                    }}
-                                    title="Delete file"
-                                    aria-label={`Delete ${filename}`}
-                                    className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white text-black flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity duration-150 shadow"
-                                    style={{ zIndex: 60 }}
-                                  >
-                                    ✕
-                                  </button>
-                                </div>
-                              );
-                            })
-                          ) : (
-                            <div className="col-span-3 text-gray4 text-sm">No files</div>
+           {/* File preview modal (portal) - shows all files, allows select, download, delete */}
+           {showFileModal &&
+             typeof window !== "undefined" &&
+             document.getElementById("root") &&
+             ReactDOM.createPortal(
+               <div>
+                 <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black bg-opacity-50 p-4">
+                   <div className="bg-grayDash rounded-lg shadow-lg w-full max-w-[900px] overflow-hidden">
+                     <div className="flex justify-between items-center p-4 border-b border-[#2A2D36]">
+                       <div className="flex items-center gap-3">
+                         <div className="text-white font-semibold">Files</div>
+                         <div className="flex items-center bg-[#1f1ff]">
+                           <button
+                             className={`px-3 py-1 ${modalTab === "upload" ? "bg-pink2 text-white" : "text-gray4"}`}
+                             onClick={() => setModalTab("upload")}
+                           >
+                             Upload
+                           </button>
+                         </div>
+                       </div>
+                       <div className="flex items-center gap-2">
+                         <button
+                           className="text-gray4 p-2 rounded group-hover:bg-[#2A2D36]"
+                           onClick={() => setShowFileModal(false)}
+                         >
+                           <IoClose />
+                         </button>
+                       </div>
+                     </div>
+
+                     <div className="flex flex-col md:flex-row gap-4 p-4">
+                       {/* Left pane: preview OR upload UI based on tab */}
+                       {modalTab === "preview" ? (
+                         <div className="flex-shrink-0 w-full md:w-2/3 flex items-center justify-center bg-[#23272F] border border-[#2A2D36] rounded p-3 overflow-auto">
+                           {Array.isArray(localFiles) && localFiles.length > 0 ? (
+                             (() => {
+                               const f = localFiles[selectedFileIndex] || localFiles[0];
+                               const isImage = /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(f.path || "");
+                               return isImage ? (
+                                 <img
+                                   src={getFileUrl(f)}
+                                   alt={f.path?.split?.("/").pop?.() || "preview"}
+                                   className="max-h-[70vh] max-w-full object-contain"
+                                 />
+                               ) : (
+                                 <div className="flex flex-col items-center text-gray4">
+                                   <FaRegFileAlt className="w-20 h-20 mb-2" />
+                                   <div className="text-sm">{f.path?.split?.("/").pop() || f.id}</div>
+                                 </div>
+                               );
+                             })()
+                           ) : (
+                             <div className="flex flex-col items-center text-gray4">
+                               <FaRegFileAlt className="w-12 h-12 mb-2" />
+                               <div className="text-sm">No files</div>
+                             </div>
+                           )}
+                         </div>
+                       ) : (
+                         <div
+                           className="flex-shrink-0 w-full md:w-2/3 bg-[#23272F] border border-[#2A2D36] rounded p-3"
+                           onDrop={handleDrop}
+                           onDragOver={handleDragOver}
+                         >
+                           <div className="border-2 border-dashed border-[#2A2D36] rounded-lg p-4 mb-4 flex flex-col items-center gap-3">
+                             <div className="text-white font-semibold mb-2">Drag & drop files here</div>
+                             <div className="text-gray4 text-sm">or click to select files. Max: <span className="text-white">{formatMaxSize()}</span></div>
+                             <label className="inline-flex items-center gap-2 cursor-pointer mt-2">
+                               <div className="px-3 py-2 bg-pink2 text-white rounded-md font-medium">Select files</div>
+                               <input type="file" multiple onChange={handleFileChange} className="hidden" />
+                             </label>
+                           </div>
+
+                           {/* Upload queue */}
+                           {uploadQueue.length > 0 && (
+                             <div className="mb-2">
+                               <div className="text-white font-semibold mb-2">Upload queue</div>
+                               <div className="flex flex-col gap-2">
+                                 {uploadQueue.map((q) => (
+                                   <div key={q.id} className="flex items-center gap-3 bg-[#1F1F1F] rounded-lg px-3 py-2">
+                                     <div className="w-12 h-12 rounded overflow-hidden bg-[#111] flex items-center justify-center border border-[#2A2D36]">
+                                       {q.preview ? <img src={q.preview} alt={q.file.name} className="w-full h-full object-cover" /> : <FaRegFileAlt className="text-pink2 w-6 h-6" />}
+                                     </div>
+                                     <div className="flex-1 min-w-0">
+                                       <div className="text-white truncate">{q.file.name}</div>
+                                       <div className="flex items-center gap-3 mt-1">
+                                         <div className="h-2 bg-[#2A2D36] rounded-md flex-1 overflow-hidden">
+                                           <div style={{ width: `${q.progress}%` }} className={`h-2 bg-pink2 rounded-md transition-all`} />
+                                         </div>
+                                         <div className="text-xs text-gray4 whitespace-nowrap">{q.progress}%</div>
+                                         <div className="text-xs text-gray4">· {formatBytes(q.size)}</div>
+                                       </div>
+                                       {q.status === "error" && (
+                                         <div className="text-xs text-red-500 mt-1">
+                                           {q.error || "Upload failed"}
+                                         </div>
+                                       )}
+                                     </div>
+                                     <div className="flex items-center gap-2 ml-2">
+                                       {q.status === "uploading" ? (
+                                         <>
+                                           <button className="text-gray4 px-2 py-1 rounded" title="Uploading" disabled>…</button>
+                                           <button onClick={() => cancelUpload(q.id)} className="text-red-500 px-2 py-1 rounded" title="Cancel">Cancel</button>
+                                         </>
+                                       ) : q.status === "queued" ? (
+                                         <button onClick={() => cancelUpload(q.id)} className="text-red-500 px-2 py-1 rounded" title="Cancel">Cancel</button>
+                                       ) : q.status === "error" ? (
+                                         <>
+                                           <button onClick={() => uploadSingle(q)} className="text-yellow-400 px-2 py-1 rounded" title="Retry">Retry</button>
+                                           <button onClick={() => cancelUpload(q.id)} className="text-red-500 px-2 py-1 rounded" title="Remove">Remove</button>
+                                         </>
+                                       ) : null}
+                                     </div>
+                                   </div>
+                                 ))}
+                               </div>
+                             </div>
+                           )}
+                        </div>
+                      )}
+
+                      {/* Right pane: files list / actions (use localFiles) */}
+                      <div className="flex-1 flex flex-col gap-3">
+                        <div className="flex-1 overflow-y-auto max-h-[60vh] p-1">
+                          <div className="grid grid-cols-3 gap-2">
+                            {Array.isArray(localFiles) && localFiles.length > 0 ? (
+                              localFiles.map((f, idx) => {
+                                const url = getFileUrl(f);
+                                const filename = f.path?.split?.("/").pop() || f.id;
+                                const isImage = /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(f.path || "");
+                                return (
+                                  // make the thumbnail a group so delete button appears on hover
+                                  <div key={f.id || idx} className="relative group">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedFileIndex(idx);
+                                        setModalTab("preview");
+                                      }}
+                                      className={`w-full h-24 rounded border overflow-hidden bg-[#23272F] flex items-center justify-center transition ${selectedFileIndex === idx ? "border-pink2 ring-2 ring-pink2" : "border-[#2A2D36]"}`}
+                                    >
+                                      {isImage ? (
+                                        <img src={url} alt={filename} className="w-full h-full object-cover" />
+                                      ) : (
+                                        <div className="flex flex-col items-center text-gray4">
+                                          <FaRegFileAlt className="w-6 h-6" />
+                                          <div className="text-xs mt-1 truncate">{filename}</div>
+                                        </div>
+                                      )}
+                                    </button>
+
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        deleteFileDirect(f);
+                                      }}
+                                      title="Delete file"
+                                      aria-label={`Delete ${filename}`}
+                                      className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white text-black flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity duration-150 shadow"
+                                      style={{ zIndex: 60 }}
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                );
+                              })
+                            ) : (
+                              <div className="col-span-3 text-gray4 text-sm">No files</div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                          {Array.isArray(localFiles) && localFiles[selectedFileIndex] && (
+                            <>
+                              <button
+                                onClick={() => downloadFile(localFiles[selectedFileIndex])}
+                                className="px-4 py-2 rounded bg-pink2 text-white font-semibold"
+                              >
+                                Download
+                              </button>
+                              <button
+                                onClick={() => setShowFileModal(false)}
+                                className="px-4 py-2 rounded bg-gray3 text-white"
+                              >
+                                Close
+                              </button>
+                            </>
                           )}
                         </div>
                       </div>
-
-                      <div className="flex gap-2">
-                        {Array.isArray(localFiles) && localFiles[selectedFileIndex] && (
-                          <>
-                            <button
-                              onClick={() => downloadFile(localFiles[selectedFileIndex])}
-                              className="px-4 py-2 rounded bg-pink2 text-white font-semibold"
-                            >
-                              Download
-                            </button>
-                            <button
-                              onClick={() => setShowFileModal(false)}
-                              className="px-4 py-2 rounded bg-gray3 text-white"
-                            >
-                              Close
-                            </button>
-                          </>
-                        )}
-                      </div>
                     </div>
                   </div>
-                </div>
-              </div>,
-              document.getElementById("root")
+                  </div>
+                 </div>,
+                 document.getElementById("root")
+             )}
+
+                {/* Delete confirmation modal for file deletion */}
+                <DeleteConfirmationModal
+                  isOpen={showDeleteConfirm}
+                  onClose={() => {
+                    if (isDeletingFile) return; // prevent closing while deleting
+                    setShowDeleteConfirm(false);
+                    setFileToDelete(null);
+                  }}
+                  onDelete={handleDeleteFile}
+                  title="Delete file"
+                  message="Are you sure you want to delete this file? This action cannot be undone."
+                  isLoading={isDeletingFile}
+                />
+              </tr>
             )}
-
-          {/* Delete confirmation modal for file deletion */}
-          <DeleteConfirmationModal
-            isOpen={showDeleteConfirm}
-            onClose={() => {
-              if (isDeletingFile) return; // prevent closing while deleting
-              setShowDeleteConfirm(false);
-              setFileToDelete(null);
-            }}
-            onDelete={handleDeleteFile}
-            title="Delete file"
-            message="Are you sure you want to delete this file? This action cannot be undone."
-            isLoading={isDeletingFile}
-          />
-        </tr>
-      )}
-    </Draggable>
-  );
-};
+        </Draggable>
+      );
+        }
 
 
 
-export default SheetTableItem;
+      export default SheetTableItem;
