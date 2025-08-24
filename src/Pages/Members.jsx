@@ -59,7 +59,9 @@ const MembersPage = () => {
 	// derive type from URL query (support ?type=VIEWERS as requested)
 	const urlType = new URLSearchParams(search).get("type")?.toUpperCase();
 	const isViewer = urlType === "VIEWERS"; // <= new flag for UI text switching
-	const requestType = isViewer ? "VIEWER" : urlType || "MEMBER";
+	// do not default to "MEMBER" — only request VIEWER when explicitly requested,
+	// otherwise leave undefined so the backend receives no `type` filter.
+	const requestType = isViewer ? "VIEWER" : (urlType || undefined);
 
 	// Read initial page and limit from URL
 	const urlParams = new URLSearchParams(search);
@@ -90,8 +92,11 @@ const MembersPage = () => {
 		queryKey: ["members-page", requestType, page, pageSize],
 		queryFn: async () => {
 			if (!token) return { items: [], total: 0 };
+			// build params conditionally so `type` is omitted when not set
+			const params = { page, limit: pageSize };
+			if (requestType) params.type = requestType;
 			const res = await axiosInstance.get("/member/paginated", {
-				params: { type: requestType, page, limit: pageSize },
+				params,
 				headers: { Authorization: `Bearer ${token}` },
 			});
 
