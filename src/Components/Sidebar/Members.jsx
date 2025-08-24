@@ -21,16 +21,18 @@ const Members = ({ role }) => {
     error,
     data: membersData,
   } = useQuery({
-    queryKey: ["members"],
+    queryKey: ["members"], // non-paginated sidebar list uses simple key
     queryFn: async () => {
+      // sidebar uses non-paginated endpoint for small quick list
       const response = await axiosInstance.get("/member", {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
-      return response.data.members;
+      // original API shape returned response.data.members
+      return response.data?.members || [];
     },
-    enabled: role != "member" && !!token,
+    // enabled: role != "member" && !!token,
     staleTime: 300000,
     cacheTime: 600000, // cache for 10 minutes
     refetchOnWindowFocus: false, // don't refetch when window/tab is focused
@@ -39,7 +41,8 @@ const Members = ({ role }) => {
 
   useEffect(() => {
     if (membersData) {
-      setMembers(membersData);
+      // membersData is already an array from /member endpoint
+      setMembers(Array.isArray(membersData) ? membersData : []);
     }
   }, [membersData]);
 
@@ -94,13 +97,23 @@ const Members = ({ role }) => {
               overflowY: undefined,
             }}
           >
-            {displayedMembers.length > 0 ? (
+            {isLoading ? (
+              <div className="bg-grayDash py-3 px-3 rounded-[17px] shadow-xl">
+                <div className="text-white text-center py-4">Loading members...</div>
+              </div>
+            ) : displayedMembers.length > 0 ? (
               displayedMembers.map((member, index) => (
+                // make the whole member row clickable and accessible
                 <div
                   key={member.id || index}
-                  // attach ref to the first rendered item for measuring height
                   ref={index === 0 ? itemRef : null}
-                  className="member flex items-center gap-[12px]"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => navigate("/dashboard/members")}
+                  onKeyPress={(e) => {
+                    if (e.key === "Enter" || e.key === " ") navigate("/dashboard/members");
+                  }}
+                  className="member flex items-center gap-[12px] cursor-pointer"
                 >
                   <div className="memImg">
                     <img

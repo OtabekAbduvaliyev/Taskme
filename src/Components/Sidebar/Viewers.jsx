@@ -12,13 +12,16 @@ const Viewers = ({ role }) => {
     error,
     data: membersData,
   } = useQuery({
-    queryKey: ["members"],
+    queryKey: ["members"], // use same non-paginated key for sidebar
     queryFn: async () => {
+      // sidebar uses non-paginated endpoint
       const response = await axiosInstance.get("/member", {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
+      // keep original shape handling: some endpoints returned array or { members: [...] }
+      // return the raw data and normalize in effect below
       return response.data;
     },
     enabled: role != "member" && !!token,
@@ -29,10 +32,12 @@ const Viewers = ({ role }) => {
   const [members, setMembers] = useState([]);
   useEffect(() => {
     if (membersData) {
-      setMembers(membersData);
+      // support either array or { members: [...] } shaped response
+      const list = Array.isArray(membersData) ? membersData : membersData?.members || [];
+      setMembers(list);
     }
   }, [membersData]);
-  const viewerMembers = members.filter((member) => member.type === "VIEWER");
+  const viewerMembers = members.filter((member) => member.type === "VIEWER"); // already filtered by type=VIEWER on backend
 
   // rendering handled in return
 
@@ -45,7 +50,7 @@ const Viewers = ({ role }) => {
             {viewerMembers.length > 2 && (
               <button
                 className="w-full sm:w-auto text-white text-[12px] sm:text-[13px] py-[8px] px-[12px] rounded-[9px] text-center bg-transparent hover:bg-white/5 transition"
-                onClick={() => navigate("/dashboard/viewers")}
+                onClick={() => navigate("/dashboard/members?type=VIEWERS")}
                 title="See all viewers"
                 aria-label="See all viewers"
               >
@@ -56,7 +61,9 @@ const Viewers = ({ role }) => {
           {viewerMembers.length > 0 ? (
             viewerMembers.map((member, i) => (
               <div key={i} className="secLine my-[12px] space-y-[4px]">
-                <div className="viewer flex items-center gap-[12px]">
+                <div 
+                onClick={() => navigate("/dashboard/members?type=VIEWERS")}
+                 className="viewer flex items-center gap-[12px] cursor-pointer">
                   <div className="memImg">
                     <img
                       src={

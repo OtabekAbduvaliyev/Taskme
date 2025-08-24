@@ -16,7 +16,6 @@ import Settings from './Components/Settings/Settings';
 import AdminDashboard from './Pages/Admin/AdminDashboard';
 import TermsofPolicy from './Components/Auth/TermsofPolicy';
 import MembersPage from './Pages/Members';
-import ViewersPage from './Pages/Viewers';
 
 const App = () => {
   const router = createBrowserRouter([
@@ -67,10 +66,6 @@ const App = () => {
         {
           path: "/dashboard/members",
           element: <AuthProvider> <ProtectedRoute element={<MembersPage />} /></AuthProvider>,
-        },
-        {
-          path: "/dashboard/viewers",
-          element: <AuthProvider> <ProtectedRoute element={<ViewersPage />} /></AuthProvider>,
         },
         {
           path: "/dashboard/workspace/:id",
