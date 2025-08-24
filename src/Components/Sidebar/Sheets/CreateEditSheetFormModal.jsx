@@ -81,6 +81,12 @@ const CreateSheetFormModal = ({
       isDefault: true
     },
     {
+      name: "Due Date",
+      type: ColumnType.DUEDATE,
+      show: true,
+      isDefault: true,
+    },
+    {
       name: "Members",
       type: ColumnType.MEMBERS,
       show: true,

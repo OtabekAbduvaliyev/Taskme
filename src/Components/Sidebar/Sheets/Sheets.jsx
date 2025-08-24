@@ -22,8 +22,6 @@ import { FaListUl } from "react-icons/fa";
 import SheetTabel from "./SheetTabel";
 import CreateSheetFormModal from "./CreateEditSheetFormModal";
 import { AnimatePresence, motion } from "framer-motion";
-import Calendar from "react-calendar"; // You may need to install this or use a placeholder
-import "react-calendar/dist/Calendar.css";
 import SheetList from "./SheetList";
 import SheetCalendar from "./SheetCalendar";
 import DeleteConfirmationModal from "../../../Components/Modals/DeleteConfirmationModal";
@@ -379,6 +377,23 @@ const {
         : currentPlan.maxSheets
       : "";
 
+  // Add this handler so calendar "Open task" can switch to table and focus the task
+  const handleOpenTaskFromCalendar = (taskId) => {
+    if (!taskId) return;
+    // switch to table view
+    setView("table");
+    // set selected task(s) so table shows it as selected
+    setSelectedTasks([taskId]);
+    // optionally navigate to page 1 so task is visible (adjust if you have server-side paging logic)
+    setCurrentPage(1);
+    // dispatch event for any components that need to focus the specific row
+    try {
+      window.dispatchEvent(new CustomEvent("focusTask", { detail: { taskId } }));
+    } catch (e) {
+      // ignore; old browsers may not support CustomEvent constructor
+    }
+  };
+
   return (
     <>
       {/* Toast Notification */}
@@ -662,28 +677,8 @@ const {
                       </div>
                     )}
                     {view === "calendar" && (
-                      <div className="mt-[26px] flex items-center justify-center">
-                        <div className="bg-grayDash rounded-[12px] p-8 flex flex-col items-center gap-3 text-center max-w-md">
-                          <IoMdCalendar className="text-pink2 text-[36px]" />
-                          <div className="text-white font-bold text-xl">Coming Soon</div>
-                          <div className="text-gray4 text-sm">Calendar view is coming soon — a visual, date-based view of your tasks.</div>
-                          <div className="flex gap-3 mt-3">
-                            <button
-                              className="bg-white text-pink2 px-4 py-2 rounded"
-                              onClick={() => setView("table")}
-                            >
-                              Open Table
-                            </button>
-                            <button
-                              className="border border-gray-600 text-white px-4 py-2 rounded"
-                              onClick={() =>
-                                setToast({ isOpen: true, type: "info", message: "We'll notify you when Calendar view is ready." })
-                              }
-                            >
-                              Notify me
-                            </button>
-                          </div>
-                        </div>
+                      <div className="">
+                        <SheetCalendar tasks={tasks} onOpenTask={handleOpenTaskFromCalendar} />
                       </div>
                     )}
                   </motion.div>
@@ -736,3 +731,4 @@ const {
   );
 };
 export default Sheets;
+
