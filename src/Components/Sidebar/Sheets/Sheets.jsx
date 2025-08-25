@@ -322,16 +322,21 @@ const {
     if (!selectedTasks.length) return;
     setDeletingTasks([...selectedTasks]); // show loading on modal
     try {
-      await Promise.all(selectedTasks.map(id =>
-        axiosInstance.delete(`/task/${id}`, { headers: { Authorization: `Bearer ${token}` } })
-      ));
+      // Use bulk delete endpoint instead of deleting one-by-one
+      await axiosInstance.post(
+        "/task/bulk-delete",
+        { taskIds: selectedTasks },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      // Update UI after successful bulk delete
       setSelectedTasks([]);
       setIsDeleteTaskModalOpen(false);
       setCurrentPage(1);
-      // refresh tasks list (parent query)
       try { await taskRefetch(); } catch(_) { }
     } catch (err) {
-      // optionally show an error toast
+      // optionally show an error toast or log
+      console.error("Bulk delete tasks error:", err);
     } finally {
       setDeletingTasks([]);
     }

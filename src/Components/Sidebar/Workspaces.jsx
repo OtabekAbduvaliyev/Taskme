@@ -1,5 +1,5 @@
 import { Dropdown, Space } from "antd";
-import React, { useContext, useState, useCallback, useEffect } from "react";
+import React, { useContext, useState, useCallback, useEffect, useRef } from "react";
 import { BsThreeDotsVertical } from "react-icons/bs";
 import { IoAddCircleOutline } from "react-icons/io5";
 import { AuthContext } from "../../Auth/AuthContext";
@@ -33,6 +33,10 @@ const Workspaces = ({user}) => {
     message: "",
   });
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
+
+  // show a temporary limit error when user tries to create beyond plan
+  const [limitErrorOpen, setLimitErrorOpen] = useState(false);
+  const limitTimeoutRef = useRef(null);
 
   // Fetch current plan
   const {
@@ -420,7 +424,12 @@ console.log(currentPlan);
             className="flex items-center gap-0 text-white px-[19px] bg-white w-full justify-between py-[10px] rounded-[9px]"
             onClick={() => {
               if (workspaceLimitReached) {
-                setUpgradeModalOpen(true);
+                // show temporary limit error for 5s
+                setLimitErrorOpen(true);
+                if (limitTimeoutRef.current) clearTimeout(limitTimeoutRef.current);
+                limitTimeoutRef.current = setTimeout(() => {
+                  setLimitErrorOpen(false);
+                }, 5000);
               } else {
                 handleToggleModal();
               }
@@ -440,6 +449,20 @@ console.log(currentPlan);
               </p>
             )}
           </button>
+
+          {/* show temporary limit error only when user tries to add beyond plan */}
+          {limitErrorOpen && (
+            <p className="text-red-400 text-xs mt-1">
+              Workspace limit reached for your plan ({displayMaxWorkspaces}).{" "}
+              <button
+                type="button"
+                className="underline text-red-400 ml-1"
+                onClick={() => setUpgradeModalOpen(true)}
+              >
+                Upgrade
+              </button>
+            </p>
+          )}
           <UpgradePlanModal
             isOpen={upgradeModalOpen}
             onClose={() => setUpgradeModalOpen(false)}

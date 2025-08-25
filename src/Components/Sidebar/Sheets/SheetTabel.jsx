@@ -581,16 +581,13 @@ const SheetTabel = ({
       // mark as deleting immediately for UI feedback
       setDeletingTaskIds(prev => [...new Set([...prev, ...tasksToDelete])]);
 
-      // Delete each task by ID
-      await Promise.all(
-        tasksToDelete.map((taskId) =>
-          axiosInstance.delete(`/task/${taskId}`, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          })
-        )
+      // Use bulk delete endpoint
+      await axiosInstance.post(
+        "/task/bulk-delete",
+        { taskIds: tasksToDelete },
+        { headers: { Authorization: `Bearer ${token}` } }
       );
+
       // Remove deleted tasks from filteredTasks
       setFilteredTasks((prev) =>
         prev.filter((task) => !tasksToDelete.includes(task.id))
@@ -599,7 +596,7 @@ const SheetTabel = ({
       // attempt to refresh server-side pagination / data in parent if provided
       try { if (typeof taskRefetch === "function") await taskRefetch(); } catch (_) { }
     } catch (err) {
-      // Optionally handle error
+      console.error("Bulk delete tasks error:", err);
     }
     // clean up deleting state
     setDeletingTaskIds(prev => prev.filter(id => !tasksToDelete.includes(id)));

@@ -8,7 +8,8 @@ const Dashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="relative flex h-screen w-full overflow-hidden bg-background">
+    <div className="bg-background">
+    <div className="relative flex h-screen w-full overflow-hidden max-w-[1920px] m-auto">
       {/* Sidebar */}
       <div
         className={`${
@@ -38,6 +39,7 @@ const Dashboard = () => {
           onClick={() => setSidebarOpen(false)}
         />
       )}
+    </div>
     </div>
   );
 };
