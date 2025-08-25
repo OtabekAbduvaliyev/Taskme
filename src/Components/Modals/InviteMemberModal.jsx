@@ -3,6 +3,7 @@ import { FiMail, FiUserPlus, FiX } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import axiosInstance from "../../AxiosInctance/AxiosInctance";
 import ReactDOM from "react-dom";
+import useEscapeKey from "./hooks/useEscapeKey";
 const InviteMemberModal = ({ isOpen, onClose }) => {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -18,6 +19,9 @@ const InviteMemberModal = ({ isOpen, onClose }) => {
   const [showAdminTooltip, setShowAdminTooltip] = useState(false);
   const token = localStorage.getItem("token");
   const inputRef = useRef(null);
+
+  // Handle ESC key press - disabled during loading to prevent accidental closes
+  useEscapeKey(isOpen, onClose, isLoading);
 
   // Fetch available workspaces (exposed so it can be refetched)
   const fetchWorkspaces = async () => {

@@ -2,6 +2,7 @@ import React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { FiX } from 'react-icons/fi'
 import { MdOutlineWarningAmber } from 'react-icons/md'
+import useEscapeKey from './hooks/useEscapeKey'
 
 const DeleteConfirmationModal = ({
   isOpen,
@@ -11,6 +12,8 @@ const DeleteConfirmationModal = ({
   message = "Are you sure you want to delete this item? This action cannot be undone.",
   isLoading = false, // new prop to indicate delete in progress
 }) => {
+  // Handle ESC key press - disabled during loading to prevent accidental closes
+  useEscapeKey(isOpen, onClose, isLoading);
   
   return (
     <AnimatePresence>

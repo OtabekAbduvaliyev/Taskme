@@ -11,6 +11,7 @@ import { FiX } from "react-icons/fi";
 import { BsTable } from "react-icons/bs";
 import axiosInstance from "../../../AxiosInctance/AxiosInctance";
 import swal from "sweetalert";
+import useEscapeKey from "../../Modals/hooks/useEscapeKey";
 
 const ColumnType = {
   SELECT: "SELECT",
@@ -108,6 +109,10 @@ const CreateSheetFormModal = ({
   const [loading, setLoading] = useState(false); // Add loading state
   const inputRef = useRef(null);
   const columnsEndRef = useRef(null);
+  const columnInputRefs = useRef({}); // Refs for column name inputs
+
+  // Handle ESC key press - disabled during loading to prevent accidental closes
+  useEscapeKey(isOpen, handleToggleModal, loading);
 
   // Add useEffect to keep sheet.name in sync when editing
   useEffect(() => {
@@ -136,6 +141,7 @@ const CreateSheetFormModal = ({
   }, [isOpen]);
 
   const handleAddColumn = () => {
+    const newColumnIndex = columns.length;
     setColumns([
       ...columns,
       {
@@ -146,6 +152,14 @@ const CreateSheetFormModal = ({
         sheetId: sheetId,
       },
     ]);
+    
+    // Focus on the new column's name input after state update
+    setTimeout(() => {
+      const inputRef = columnInputRefs.current[newColumnIndex];
+      if (inputRef) {
+        inputRef.focus();
+      }
+    }, 100);
   };
 
   // Scroll to bottom when columns length changes (new column added)
@@ -225,6 +239,7 @@ const CreateSheetFormModal = ({
   };
 
   const handleEditSheet = useCallback(async () => {
+    setLoading(true); // Start loading
     try {
       await axiosInstance.put(
         `/sheet/${editingSheetId}`,
@@ -242,6 +257,8 @@ const CreateSheetFormModal = ({
       refetch();
     } catch (error) {
       console.error("Error creating/updating workspace:", error);
+    } finally {
+      setLoading(false); // End loading
     }
   }, [
     createSheet,
@@ -254,6 +271,32 @@ const CreateSheetFormModal = ({
     token,
     refetch,
   ]);
+
+  // Handle Enter/Return key press for form submission
+  useEffect(() => {
+    if (!isOpen || loading) return;
+
+    const handleEnterKey = (event) => {
+      if (event.key === 'Enter' || event.key === 'Return') {
+        event.preventDefault(); // Prevent default form submission behavior
+        
+        // Check if we have a sheet name (required field)
+        if (sheet.name.trim()) {
+          if (isEditing) {
+            handleEditSheet();
+          } else {
+            handleSubmit();
+          }
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleEnterKey);
+
+    return () => {
+      document.removeEventListener('keydown', handleEnterKey);
+    };
+  }, [isOpen, loading, sheet.name, isEditing, handleEditSheet, handleSubmit]);
 
   const handleChange = (e) => {
     setSheet((prevSheet) => ({
@@ -325,19 +368,19 @@ const CreateSheetFormModal = ({
     });
   };
 
-  const handleSelectColorChange = (colIndex, value) => {
-    setColumns((prev) => {
-      const updated = [...prev];
-      const selects = updated[colIndex].selects ? [...updated[colIndex].selects] : [{
-        title: "",
-        color: "#000000",
-        options: []
-      }];
-      selects[0].color = value;
-      updated[colIndex].selects = selects;
-      return updated;
-    });
-  };
+  // const handleSelectColorChange = (colIndex, value) => {
+  //   setColumns((prev) => {
+  //     const updated = [...prev];
+  //     const selects = updated[colIndex].selects ? [...updated[colIndex].selects] : [{
+  //       title: "",
+  //       color: "#000000",
+  //       options: []
+  //     }];
+  //     selects[0].color = value;
+  //     updated[colIndex].selects = selects;
+  //     return updated;
+  //   });
+  // };
 
   return ReactDOM.createPortal(
     <AnimatePresence>
@@ -439,14 +482,6 @@ const CreateSheetFormModal = ({
                       <h3 className="text-lg text-white font-semibold">
                         Columns
                       </h3>
-                      <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={handleAddColumn}
-                        className="text-pink2 hover:text-pink2/80 transition-colors text-sm font-medium"
-                      >
-                        + Add Column
-                      </motion.button>
                     </div>
 
                     <div className="space-y-4 max-h-[40vh] overflow-y-auto custom-scrollbar pr-2">
@@ -463,6 +498,11 @@ const CreateSheetFormModal = ({
                               <span className="text-white">{column.name}</span>
                             ) : (
                               <input
+                                ref={(el) => {
+                                  if (el) {
+                                    columnInputRefs.current[colIndex] = el;
+                                  }
+                                }}
                                 type="text"
                                 value={column.name}
                                 onChange={(e) =>
@@ -571,6 +611,19 @@ const CreateSheetFormModal = ({
                           )}
                         </motion.div>
                       ))}
+                      
+                      {/* Add Column Button - styled exactly like column items */}
+                      <motion.div
+                        onClick={handleAddColumn}
+                        className="bg-[#2A2A2A] border-2 border-[#3A3A3A] rounded-xl p-4 space-y-4 cursor-pointer hover:border-pink2/50 transition-all duration-300"
+                      >
+                        <div className="flex items-center justify-center">
+                          <span className="text-white text-sm font-medium">
+                            + Add Column
+                          </span>
+                        </div>
+                      </motion.div>
+                      
                       {/* Scroll anchor */}
                       <div ref={columnsEndRef} />
                     </div>
@@ -595,7 +648,7 @@ const CreateSheetFormModal = ({
                     style={loading ? { opacity: 0.6, cursor: "not-allowed" } : {}}
                   >
                     <span className="relative z-10">
-                      {loading ? "Creating..." : (isEditing ? "Save Changes" : "Create Sheet")}
+                      {loading ? (isEditing ? "Saving..." : "Creating...") : (isEditing ? "Save Changes" : "Create Sheet")}
                     </span>
                     <div className="absolute inset-0 bg-gradient-to-r from-pink2/0 via-white/20 to-pink2/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
                   </motion.button>

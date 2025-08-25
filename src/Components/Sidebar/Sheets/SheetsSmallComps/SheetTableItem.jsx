@@ -33,6 +33,7 @@ const SheetTableItem = ({
   stickyFirstThreeColumns,
   autoFocus, // <-- new prop
   isDeleting = false, // new prop to indicate deletion in progress
+  showLastUpdateColumn = true, // new prop: whether to show last update column
 }) => {
   const handleInputChange = (taskKey, e) => {
     const key = String(taskKey).toLowerCase();
@@ -1437,38 +1438,40 @@ const SheetTableItem = ({
              {renderFilesCell()}
            </td>
  
-          {/* New default column: Last update (avatar, name/email, timestamp) */}
-          <td className="w-[180px] flex items-center gap-3 py-[16px] border-r border-r-[black] px-[11px] group-hover:bg-[#2A2D36]">
-             {(() => {
-               const lastUser = task?.lastUpdatedByUser || null;
-               const avatarPath = lastUser?.avatar?.path
-                 ? getFileUrl({ path: lastUser.avatar.path })
-                 : testMemImg;
-               const displayName = lastUser
-                 ? `${lastUser.firstName || ""} ${lastUser.lastName || ""}`.trim() || lastUser.email || "User"
-                 : "—";
-               const time = task?.updatedAt || task?.updatedAt || task?.updatedAt;
-               const formatted = time ? dayjs(time).format("MMM D, HH:mm") : "";
-               return (
-                 <div className="flex items-center w-full">
-                   <img
-                     src={avatarPath}
-                     alt={lastUser?.firstName || "User"}
-                     className="w-8 h-8 rounded-full object-cover border-2 border-[#23272F] flex-shrink-0"
-                   />
-                   <div className="flex-1 ml-3 min-w-0">
-                     <div className="text-white text-sm truncate">{displayName}</div>
-                     {/* show deleting marker when applicable */}
-                     {isDeleting ? (
-                       <div className="text-yellow-300 text-xs">Deleting...</div>
-                     ) : (
-                       <div className="text-gray4 text-xs">{formatted}</div>
-                     )}
+          {/* New default column: Last update (avatar, name/email, timestamp) - conditional rendering */}
+          {showLastUpdateColumn && (
+            <td className="w-[180px] flex items-center gap-3 py-[16px] border-r border-r-[black] px-[11px] group-hover:bg-[#2A2D36]">
+               {(() => {
+                 const lastUser = task?.lastUpdatedByUser || null;
+                 const avatarPath = lastUser?.avatar?.path
+                   ? getFileUrl({ path: lastUser.avatar.path })
+                   : testMemImg;
+                 const displayName = lastUser
+                   ? `${lastUser.firstName || ""} ${lastUser.lastName || ""}`.trim() || lastUser.email || "User"
+                   : "—";
+                 const time = task?.updatedAt || task?.updatedAt || task?.updatedAt;
+                 const formatted = time ? dayjs(time).format("MMM D, HH:mm") : "";
+                 return (
+                   <div className="flex items-center w-full">
+                     <img
+                       src={avatarPath}
+                       alt={lastUser?.firstName || "User"}
+                       className="w-8 h-8 rounded-full object-cover border-2 border-[#23272F] flex-shrink-0"
+                     />
+                     <div className="flex-1 ml-3 min-w-0">
+                       <div className="text-white text-sm truncate">{displayName}</div>
+                       {/* show deleting marker when applicable */}
+                       {isDeleting ? (
+                         <div className="text-yellow-300 text-xs">Deleting...</div>
+                       ) : (
+                         <div className="text-gray4 text-xs">{formatted}</div>
+                       )}
+                     </div>
                    </div>
-                 </div>
-               );
-             })()}
-           </td>
+                 );
+               })()}
+             </td>
+          )}
 
            {/* File preview modal (portal) - shows all files, allows select, download, delete */}
            {showFileModal &&

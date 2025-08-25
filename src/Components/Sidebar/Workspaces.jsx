@@ -440,11 +440,6 @@ console.log(currentPlan);
               </p>
             )}
           </button>
-          {workspaceLimitReached && (
-            <p className="text-red-400 text-xs mt-1">
-              Workspace limit reached for your plan ({displayMaxWorkspaces}). Upgrade to add more.
-            </p>
-          )}
           <UpgradePlanModal
             isOpen={upgradeModalOpen}
             onClose={() => setUpgradeModalOpen(false)}

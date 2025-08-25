@@ -3,9 +3,13 @@ import { createPortal } from 'react-dom';
 import { FiX } from 'react-icons/fi';
 import { HiOutlineFolder } from 'react-icons/hi';
 import { motion, AnimatePresence } from 'framer-motion';
+import useEscapeKey from './hooks/useEscapeKey';
 
 const WorkspaceFormModal = ({ isOpen, onClose, isEditing, workspaceName, onWorkspaceNameChange, onSubmit }) => {
   const inputRef = useRef(null);
+
+  // Handle ESC key press
+  useEscapeKey(isOpen, onClose);
 
   useEffect(() => {
     if (isOpen && inputRef.current) {

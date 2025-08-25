@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import DeleteConfirmationModal from '../Modals/DeleteConfirmationModal';
 import dayjs from 'dayjs';
 import defImg from "../../assets/default-avatar-icon-of-social-media-user-vector.jpg";
+import useEscapeKey from '../Modals/hooks/useEscapeKey';
 
 const Settings = () => {
   const [activeTab, setActiveTab] = useState('profile');
@@ -26,6 +27,10 @@ const Settings = () => {
   const token = localStorage.getItem('token');
   const { updatePassword } = useContext(AuthContext);
   const navigate = useNavigate();
+
+  // Handle ESC key press to trigger "Back to work" functionality
+  const handleBackToWork = () => navigate(-1);
+  useEscapeKey(true, handleBackToWork);
 
   // responsive helper: true when viewport is >= md (768px)
   const [isMdUp, setIsMdUp] = useState(typeof window !== 'undefined' ? window.innerWidth >= 768 : false);
