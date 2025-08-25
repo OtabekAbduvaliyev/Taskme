@@ -71,6 +71,24 @@ const SheetTabel = ({
   const token = localStorage.getItem("token");
   const { createColumn, dndOrdersTasks, dndOrdersColumns } = useContext(AuthContext);
 
+  // localStorage key for Last Update column visibility
+  const LAST_UPDATE_VISIBILITY_KEY = `lastUpdateColumn_${sheetId}_visible`;
+  
+  // State for Last Update column visibility (default: true)
+  const [showLastUpdateColumn, setShowLastUpdateColumn] = useState(() => {
+    const saved = localStorage.getItem(LAST_UPDATE_VISIBILITY_KEY);
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
+  // Function to toggle Last Update column visibility
+  const toggleLastUpdateColumn = useCallback(() => {
+    setShowLastUpdateColumn(prev => {
+      const newValue = !prev;
+      localStorage.setItem(LAST_UPDATE_VISIBILITY_KEY, JSON.stringify(newValue));
+      return newValue;
+    });
+  }, [LAST_UPDATE_VISIBILITY_KEY]);
+
   // New: queryClient to invalidate other sheet queries after updates
 
 
@@ -274,6 +292,7 @@ const SheetTabel = ({
           <div className="p-3">
             <div className="text-white font-semibold mb-2">Columns</div>
             <div className="max-h-64 overflow-auto custom-scrollbar">
+              {/* Dynamic columns from database */}
               {!sheets?.columns?.length ? (
                 <div className="text-gray4 text-sm">No columns</div>
               ) : (
@@ -292,6 +311,40 @@ const SheetTabel = ({
                   </div>
                 ))
               )}
+              
+              {/* Separator for default columns */}
+              {sheets?.columns?.length > 0 && (
+                <div className="border-t border-[#2A2A2A] my-2"></div>
+              )}
+              
+              {/* Default columns section */}
+              <div className="text-gray4 text-xs mb-2 uppercase tracking-wide">Default Columns</div>
+              
+              {/* Files column (always visible) */}
+              <div className="flex items-center justify-between py-2">
+                <div className="text-sm text-white truncate mr-2">Files</div>
+                <div title="Files column is always visible">
+                  <Switch
+                    className="custom-pink-switch"
+                    checked={true}
+                    disabled={true}
+                    size="small"
+                  />
+                </div>
+              </div>
+              
+              {/* Last Update column (controllable via localStorage) */}
+              <div className="flex items-center justify-between py-2">
+                <div className="text-sm text-white truncate mr-2">Last Update</div>
+                <div title="Toggle Last Update column visibility (saved locally)">
+                  <Switch
+                    className="custom-pink-switch"
+                    checked={showLastUpdateColumn}
+                    onChange={toggleLastUpdateColumn}
+                    size="small"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1041,10 +1094,12 @@ const SheetTabel = ({
                               <span className="text-white font-semibold">Files</span>
                             </div>
 
-                            {/* Last update header (new default column at the end) */}
-                            <div className="w-[180px] sm:w-[180px] flex items-center justify-between py-[12px] sm:py-[16px] border-r border-[black] px-[8px] sm:px-[11px] bg-grayDash">
-                              <span className="text-white font-semibold">Last update</span>
-                            </div>
+                            {/* Last update header (conditional based on localStorage) */}
+                            {showLastUpdateColumn && (
+                              <div className="w-[180px] sm:w-[180px] flex items-center justify-between py-[12px] sm:py-[16px] border-r border-[black] px-[8px] sm:px-[11px] bg-grayDash">
+                                <span className="text-white font-semibold">Last update</span>
+                              </div>
+                            )}
 
                             {/* Sticky Add Button */}
                             <div
@@ -1075,12 +1130,13 @@ const SheetTabel = ({
                             onChange={handleColumnChange}
                             stickyFirstThreeColumns
                             onOpenChat={() => handleOpenChatSidebar(task)}
-                          autoFocus={
-                            task.id === lastCreatedTaskIdRef.current &&
-                            index === 0 &&
-                            !autoFocusConsumedRef.current
-                          }
-                          isDeleting={deletingTaskIds.includes(task.id)}
+                            autoFocus={
+                              task.id === lastCreatedTaskIdRef.current &&
+                              index === 0 &&
+                              !autoFocusConsumedRef.current
+                            }
+                            isDeleting={deletingTaskIds.includes(task.id)}
+                            showLastUpdateColumn={showLastUpdateColumn}
                           />
                         </tr>
                       ))}

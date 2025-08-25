@@ -5,6 +5,10 @@ import { FiX } from "react-icons/fi";
 import { MdOutlineCheckCircle, MdOutlineError } from "react-icons/md";
 
 const Toast = ({ isOpen, type = "success", message, onClose }) => {
+  // Note: Toast notifications intentionally do NOT close on ESC key press
+  // This follows UX best practices - toasts should auto-dismiss or be manually closed
+  // to prevent accidental dismissal of important notifications
+  
   useEffect(() => {
     if (!isOpen) return;
     const timer = setTimeout(() => {

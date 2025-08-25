@@ -15,10 +15,16 @@ import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import axiosInstance from "../../AxiosInctance/AxiosInctance";
 import NotificationDetailModal from "./NotificationDetailModal";
+import useEscapeKey from "../Modals/hooks/useEscapeKey";
 
 const NotificationsPage = () => {
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
+  
+  // Handle ESC key press to trigger back arrow button functionality
+  const handleGoBack = () => navigate(-1);
+  useEscapeKey(true, handleGoBack);
+  
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);

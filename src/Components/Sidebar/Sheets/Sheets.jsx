@@ -619,8 +619,41 @@ const {
                     transition={{ duration: 0.3 }}
                     className="mt-[26px]"
                   >
-                    <div className="bg-grayDash rounded-[12px] font-radioCanada text-center text-gray2 py-10">
-                      No sheets found. Create a new sheet to get started!
+                    <div className="bg-grayDash rounded-[12px] font-radioCanada text-center py-10">
+                      <div className="text-gray2 mb-6">
+                        No sheets found. Create your first sheet to get started!
+                      </div>
+                      
+                      {/* Add Sheet Button - similar to addWorkspaceButton */}
+                      <div className="addSheetButton max-w-md mx-auto">
+                        <button
+                          className="flex items-center gap-3 text-white px-[19px] bg-white w-full justify-between py-[12px] rounded-[9px] transition-all duration-200"
+                          onClick={() => {
+                            if (sheetLimitReached) {
+                              setUpgradeModalOpen(true);
+                            } else {
+                              handleToggleModal();
+                            }
+                          }}
+                          disabled={false}
+                        >
+                          <IoAddCircleOutline className="text-gray4 text-[20px]" />
+                          <p className="text-gray4 text-[14px] font-medium">
+                            Create first Sheet
+                          </p>
+                          {currentPlan && (
+                            <p className="text-pink2 text-[13px]">
+                              {currentPlan.name}
+                              {sheetLimitReached ? " (limit reached)" : ""}
+                            </p>
+                          )}
+                        </button>
+                        {sheetLimitReached && (
+                          <p className="text-red-400 text-xs mt-2">
+                            Sheet limit reached for your plan ({displayMaxSheets}). Upgrade to add more.
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </motion.div>
                 ) : (
