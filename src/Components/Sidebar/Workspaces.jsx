@@ -53,7 +53,6 @@ const Workspaces = ({user}) => {
     },
     staleTime: 300000,
   });
-console.log(currentPlan);
 
   const {
     isLoading,
@@ -292,10 +291,7 @@ console.log(currentPlan);
      if (user?.roles && user?.selectedRole) {
        const foundRole = user.roles.find((i) => user.selectedRole === i.id);
        setSelectedRole(foundRole);
-       // You may keep or remove the console logs as needed for debugging
-       console.log(user);
-       console.log({ userrole: foundRole });
-       console.log({ selectedRole: foundRole });
+
      }
      // Only run when user changes
      // eslint-disable-next-line react-hooks/exhaustive-deps

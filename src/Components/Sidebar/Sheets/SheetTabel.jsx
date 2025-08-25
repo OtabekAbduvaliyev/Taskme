@@ -72,7 +72,7 @@ const SheetTabel = ({
   const { createColumn, dndOrdersTasks, dndOrdersColumns } = useContext(AuthContext);
 
   // New: queryClient to invalidate other sheet queries after updates
-
+  const queryClient = useQueryClient();
 
   // Helper: derive select options from sheets.columns (same source as desktop table)
   const getColumnOptions = (key) => {
@@ -188,7 +188,18 @@ const SheetTabel = ({
       setColumnOrder(sheets.columns.map((_, index) => index));
     }
   }, [tasks, sheets]);
-  const queryClient = useQueryClient();
+  // Refresh helper: invalidate sheet/columns and refetch sheet details
+  const refreshSheetColumns = React.useCallback(async () => {
+    try {
+      // prefer invalidation so all components using ["sheets", sheetId] re-query
+      await queryClient.invalidateQueries(["sheets", sheetId]);
+      // also call local refetch to update this component immediately
+      try { await refetch(); } catch (_) {}
+    } catch (e) {
+      // ignore
+    }
+  }, [queryClient, sheetId, refetch]);
+
   // New: track column ids currently updating to disable their switches
   const [updatingColumnIds, setUpdatingColumnIds] = useState([]);
 
@@ -1073,6 +1084,7 @@ const SheetTabel = ({
                             onSelect={handleTaskSelect}
                             onEdit={() => setEditingTaskId(task.id)}
                             onChange={handleColumnChange}
+                            onOptionsChange={refreshSheetColumns} // <-- new prop
                             stickyFirstThreeColumns
                             onOpenChat={() => handleOpenChatSidebar(task)}
                           autoFocus={

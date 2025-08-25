@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useContext } from "react";
 import { FiMail, FiUserPlus, FiX } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import axiosInstance from "../../AxiosInctance/AxiosInctance";
 import ReactDOM from "react-dom";
+import { AuthContext } from "../../Auth/AuthContext";
+
 const InviteMemberModal = ({ isOpen, onClose }) => {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -18,6 +20,9 @@ const InviteMemberModal = ({ isOpen, onClose }) => {
   const [showAdminTooltip, setShowAdminTooltip] = useState(false);
   const token = localStorage.getItem("token");
   const inputRef = useRef(null);
+
+  // get global showToast from AuthContext
+  const { showToast } = useContext(AuthContext);
 
   // Fetch available workspaces (exposed so it can be refetched)
   const fetchWorkspaces = async () => {
@@ -145,9 +150,12 @@ const InviteMemberModal = ({ isOpen, onClose }) => {
           },
         }
       );
+      // show global toast (so it persists even after modal closes)
+      try { showToast("success", "Invitation sent."); } catch (e) { /* ignore */ }
       onClose();
-    } catch (error) {
+    } catch (err) {
       setError("Failed to send invitation. Please try again.");
+      try { showToast("error", "Failed to send invitation."); } catch (e) { /* ignore */ }
     } finally {
       setIsLoading(false);
     }

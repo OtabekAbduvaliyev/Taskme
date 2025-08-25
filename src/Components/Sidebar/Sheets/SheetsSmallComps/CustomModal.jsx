@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import ColumnSelect from './ColumnSelect';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiX } from 'react-icons/fi';
@@ -77,6 +77,18 @@ const CustomModal = ({ isOpen, handleToggleModal, handleOk, column, handleChange
     handleChange({ target: { name: "selects", value: updated } });
   };
 
+  // add ref for autofocus
+  const inputRef = useRef(null);
+
+  // focus input when modal opens
+  useEffect(() => {
+    if (!isOpen) return;
+    const t = setTimeout(() => {
+      try { inputRef.current?.focus(); inputRef.current?.select?.(); } catch {}
+    }, 120);
+    return () => clearTimeout(t);
+  }, [isOpen]);
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -146,6 +158,7 @@ const CustomModal = ({ isOpen, handleToggleModal, handleOk, column, handleChange
                     className="relative group"
                   >
                     <input
+                      ref={inputRef} // <-- added
                       type="text"
                       id="columnName"
                       name="name"

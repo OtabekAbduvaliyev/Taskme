@@ -1,9 +1,21 @@
-import { useContext, useState } from "react";
+import { useContext, useState, useRef, useEffect } from "react";
 import { AuthContext } from "../../Auth/AuthContext";
 
 const CreateCompany = () => {
   const [credentials, setCredentials] = useState({ name: "" });
   const { createCompany, loading } = useContext(AuthContext);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        inputRef.current?.focus();
+        inputRef.current?.select?.();
+      } catch {}
+    }, 80);
+    return () => clearTimeout(t);
+  }, []);
+
   const handleChange = (e) => {
     setCredentials({ ...credentials, [e.target.name]: e.target.value });
   };
@@ -36,6 +48,7 @@ const CreateCompany = () => {
                   name="name"
                   type="text"
                   required
+                  ref={inputRef}
                   value={credentials.name}
                   onChange={handleChange}
                   placeholder="Company name..."

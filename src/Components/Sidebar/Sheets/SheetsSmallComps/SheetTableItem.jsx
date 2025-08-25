@@ -26,6 +26,7 @@ const SheetTableItem = ({
   columns,
   onChange,
   onEdit,
+  onOptionsChange, // <-- new prop
   index,
   isSelected,
   onSelect,
@@ -383,6 +384,8 @@ const SheetTableItem = ({
         { headers: { Authorization: `Bearer ${token}` } }
       );
       closeAddOptionModal();
+      // refresh parent sheet/columns so select options reflect the new entry
+      try { if (typeof onOptionsChange === "function") await onOptionsChange(); } catch (_) {}
       if (typeof onEdit === "function") onEdit();
     } catch (e) {
       // Optionally show error
@@ -454,11 +457,11 @@ const SheetTableItem = ({
         { name, color },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      try { if (typeof onOptionsChange === "function") await onOptionsChange(); } catch (_) {}
       if (typeof onEdit === "function") onEdit();
     } catch { }
     setSavingOptionId(null);
   };
-  console.log(user);
 
   // Delete option
   const handleDeleteOption = async (id) => {
@@ -473,6 +476,7 @@ const SheetTableItem = ({
         ...prev,
         options: prev.options.filter(opt => opt.id !== id),
       }));
+      try { if (typeof onOptionsChange === "function") await onOptionsChange(); } catch (_) {}
       if (typeof onEdit === "function") onEdit();
     } catch { }
     setDeletingOptionId(null);
@@ -664,6 +668,39 @@ const SheetTableItem = ({
       console.error("Error deleting file:", e);
     }
   };
+
+  // Confirm-clear state for dates (columnKey e.g. "duedate1" / "date1", isRange true for range pickers)
+  const [clearConfirm, setClearConfirm] = useState({
+    open: false,
+    columnKey: null,
+    isRange: false,
+  });
+
+  const requestClear = (columnKey, isRange = false) => {
+    setClearConfirm({ open: true, columnKey, isRange });
+  };
+  const closeClearConfirm = () => {
+    setClearConfirm({ open: false, columnKey: null, isRange: false });
+  };
+  const confirmClear = () => {
+    if (!clearConfirm.columnKey) return closeClearConfirm();
+    if (clearConfirm.isRange) {
+      handleInputChange(clearConfirm.columnKey, ["", ""]);
+    } else {
+      handleInputChange(clearConfirm.columnKey, "");
+    }
+    closeClearConfirm();
+  };
+
+  // close modal on ESC
+  useEffect(() => {
+    if (!clearConfirm.open) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") closeClearConfirm();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [clearConfirm.open]);
 
   const renderField = (columnKey, columnType, column, colIdx) => {
     const lowerKey = columnKey.toLowerCase();
@@ -930,15 +967,44 @@ const SheetTableItem = ({
     ) {
       const dateValue = task[lowerKey] ? dayjs(task[lowerKey]) : null;
       return (
-        <AntdDatePicker
-          showTime
-          value={dateValue}
-          onChange={(date) => handleInputChange(lowerKey, date)}
-          format="YYYY-MM-DD HH:mm"
-          className="w-full bg-grayDash text-white text-[18px] rounded px-2 py-1"
-          placeholder={'Select date & time'}
-          allowClear
-        />
+        <div className="w-full">
+          <AntdDatePicker
+            showTime
+            value={dateValue}
+            onChange={(date) => {
+              // when user clicks the clear (x) Antd passes null -> ask for confirmation
+              if (date === null) {
+                requestClear(lowerKey, false);
+                return;
+              }
+              handleInputChange(lowerKey, date);
+            }}
+            format="YYYY-MM-DD HH:mm"
+            className="w-full bg-grayDash text-white text-[18px] rounded px-2 py-1"
+            placeholder={'Select date & time'}
+            allowClear
+          />
+          {clearConfirm.open && clearConfirm.columnKey === lowerKey && (
+            typeof window !== "undefined" && document.getElementById("root") &&
+            ReactDOM.createPortal(
+              <div className="fixed inset-0 z-[10000] flex items-center justify-center">
+                <div className="absolute inset-0 bg-black/50" onClick={closeClearConfirm} />
+                <div className="relative bg-grayDash rounded-lg shadow-lg w-full max-w-[360px] p-4 z-10" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex justify-between items-center mb-3">
+                    <div className="text-lg font-semibold text-white">Confirm</div>
+                    <button className="text-gray4" onClick={closeClearConfirm}>✕</button>
+                  </div>
+                  <div className="text-sm text-gray4 mb-4">Are you sure you want to clear this date?</div>
+                  <div className="flex justify-end gap-2">
+                    <button className="px-3 py-2 rounded bg-gray3 text-white" onClick={closeClearConfirm}>Cancel</button>
+                    <button className="px-3 py-2 rounded bg-pink2 text-white" onClick={confirmClear}>Clear</button>
+                  </div>
+                </div>
+              </div>,
+              document.getElementById("root")
+            )
+          )}
+        </div>
       );
     }
 
@@ -953,15 +1019,44 @@ const SheetTableItem = ({
         : [null, null];
       const placeholder = ["Start due date & time", "End due date & time"];
       return (
-        <AntdRangePicker
-          value={rangeValue}
-          onChange={(dates) => handleInputChange(lowerKey, dates)}
-          showTime={{ format: 'HH:mm' }}
-          format="YYYY-MM-DD HH:mm"
-          className="w-full bg-grayDash !text-white text-[18px] rounded px-2 py-1 "
-          placeholder={placeholder}
-          allowClear
-        />
+        <div className="w-full">
+          <AntdRangePicker
+            value={rangeValue}
+            onChange={(dates) => {
+              // dates === null or [null,null] on clear -> confirm
+              if (!dates || (Array.isArray(dates) && dates.every(d => !d))) {
+                requestClear(lowerKey, true);
+                return;
+              }
+              handleInputChange(lowerKey, dates);
+            }}
+             showTime={{ format: 'HH:mm' }}
+             format="YYYY-MM-DD HH:mm"
+             className="w-full bg-grayDash !text-white text-[18px] rounded px-2 py-1 "
+             placeholder={placeholder}
+             allowClear
+           />
+          {clearConfirm.open && clearConfirm.columnKey === lowerKey && (
+            typeof window !== "undefined" && document.getElementById("root") &&
+            ReactDOM.createPortal(
+              <div className="fixed inset-0 z-[10000] flex items-center justify-center">
+                <div className="absolute inset-0 bg-black/50" onClick={closeClearConfirm} />
+                <div className="relative bg-grayDash rounded-lg shadow-lg w-full max-w-[420px] p-4 z-10" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex justify-between items-center mb-3">
+                    <div className="text-lg font-semibold text-white">Confirm</div>
+                    <button className="text-gray4" onClick={closeClearConfirm}>✕</button>
+                  </div>
+                  <div className="text-sm text-gray font-[500] mb-4">Are you sure you want to clear this date range?</div>
+                  <div className="flex justify-end gap-2">
+                    <button className="px-3 py-2 rounded bg-gray3 text-white" onClick={closeClearConfirm}>Cancel</button>
+                    <button className="px-3 py-2 rounded bg-pink2 text-white" onClick={confirmClear}>Clear</button>
+                  </div>
+                </div>
+              </div>,
+              document.getElementById("root")
+            )
+          )}
+        </div>
       );
     }
 
@@ -1009,8 +1104,6 @@ const SheetTableItem = ({
         </div>
       );
     }
-    console.log(lowerKey);
-
     // Link input
     if (["links"].includes(lowerKey)) {
       // task value may be stored as array; show first element or empty string

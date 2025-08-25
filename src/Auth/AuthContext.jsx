@@ -1,14 +1,15 @@
 import { createContext, useContext, useState } from "react";
 import axiosInstance from "../AxiosInctance/AxiosInctance";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import Toast from "../Components/Modals/Toast"; // import Toast
-
+import React from "react";
 const AuthContext = createContext();
 
 const AuthProvider = ({ children }) => {
   const navigate = useNavigate();
+  const location = useLocation(); // <-- NEW
   const [loading, setLoading] = useState(false);
   const { sheetId } = useParams();
   const [toast, setToast] = useState({ isOpen: false, type: "success", message: "" });
@@ -323,12 +324,22 @@ const AuthProvider = ({ children }) => {
   };
 const fetchMembers = async () => {
   const token = localStorage.getItem("token");
+  if (!token) return []; // don't attempt request without token
   const response = await axiosInstance.get("/member", {
     headers: {
       Authorization: `Bearer ${token}`,
     },
   });
-  return response.data;
+  // Normalize common response shapes to an array
+  const raw = response?.data;
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  if (Array.isArray(raw.members)) return raw.members;
+  if (Array.isArray(raw.data?.members)) return raw.data.members;
+  if (Array.isArray(raw.items)) return raw.items;
+  // fallback: find first array in response object
+  const arr = Object.values(raw).find((v) => Array.isArray(v));
+  return Array.isArray(arr) ? arr : [];
 };
   const {
     data: members,
@@ -338,6 +349,11 @@ const fetchMembers = async () => {
   } = useQuery({
     queryKey: ["members"],
     queryFn: fetchMembers,
+    // Only run members fetch when a token is present (prevents fetching on public auth pages)
+    enabled: !!localStorage.getItem("token"),
+    staleTime: 300000,
+    // keep a longer cache for sidebar usage
+    cacheTime: 600000,
   });
   const changeCompany = async (credentials, options = { deferToast: false }) => {
     const token = localStorage.getItem("token");
@@ -408,6 +424,61 @@ const fetchMembers = async () => {
       throw error;
     }
   };
+
+  // NEW: on mount, ensure authenticated users have company and plan.
+  // If token missing -> do nothing here (other routes handle login).
+  // If token exists but no company -> navigate to /createcompany.
+  // If company exists but no plan -> navigate to /subscriptions.
+  // Avoid redirect loops by allowing certain paths.
+  React.useEffect(() => {
+    const guard = async () => {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+      const allowedPaths = ["/createcompany", "/subscriptions", "/login", "/verification", "/reset-password", "/register", "/terms"];
+      // if user already on an allowed path do not force navigation
+      if (allowedPaths.includes(location.pathname)) return;
+
+      try {
+        // fetch minimal user info
+        const userRes = await axiosInstance.get("/user/info", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const user = userRes?.data || {};
+        const hasCompany = Array.isArray(user.roles) && user.roles.some(r => r?.company?.id || r?.company?._id);
+
+        if (!hasCompany) {
+          // No company -> go to create company page
+          navigate("/createcompany", { replace: true });
+          return;
+        }
+
+        // Company exists: check current plan
+        try {
+          const planRes = await axiosInstance.get("/company/current-plan", {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const currentPlan = planRes?.data || null;
+          const planExists = !!(currentPlan && (currentPlan.name || currentPlan.id || currentPlan._id || currentPlan.price !== undefined));
+          if (!planExists) {
+            navigate("/subscriptions", { replace: true });
+            return;
+          }
+        } catch (planErr) {
+          // If the endpoint fails (401/404/etc), send user to subscriptions so they can pick a plan
+          navigate("/subscriptions", { replace: true });
+          return;
+        }
+      } catch (err) {
+        // If fetching user fails (token invalid/expired), remove token and go to login
+        try { localStorage.removeItem("token"); } catch {}
+        navigate("/login", { replace: true });
+      }
+    };
+
+    // run guard once on mount
+    guard();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <AuthContext.Provider
