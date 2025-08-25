@@ -435,7 +435,7 @@ const Navbar = ({ onToggleSidebar, sidebarOpen }) => {
 
           <div className="relative" ref={profileRef}>
             <div
-              className="profile flex items-center bg-grayDash rounded-[9px] py-2 lg:py-[7px] px-3 lg:px-[12px] gap-2 lg:gap-[9px] hover:bg-gray transition-all duration-300 cursor-pointer w-full lg:w-auto h-[40px]"
+              className="profile flex items-center bg-grayDash rounded-[9px] py-2 lg:py-[7px] px-3 lg:px-[12px] gap-2 lg:gap-[9px] hover:bg-gray transition-all duration-300 cursor-pointer  lg:w-auto h-[40px]"
               onClick={() => setShowProfileDropdown((v) => !v)}
             >
               <div className="flex-1 lg:flex-none">
@@ -454,7 +454,7 @@ const Navbar = ({ onToggleSidebar, sidebarOpen }) => {
                   </p>
                 </div>
               </div>
-              <div className="profileImg w-6 h-6 lg:w-[26px] ml-auto lg:ml-0">
+              <div className="profileImg  h-6 w-[40px] lg:w-[26px] ml-auto lg:ml-0">
                 <img
                   src={
                     user?.avatar?.path
