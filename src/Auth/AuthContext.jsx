@@ -210,6 +210,28 @@ const AuthProvider = ({ children }) => {
     }
   };
 
+  // Reorder columns (calls backend endpoint /column/reorder)
+  const dndOrdersColumns = async (credentials) => {
+    setLoading(true);
+    const token = localStorage.getItem("token");
+    try {
+      const response = await axiosInstance.put("/column/reorder", credentials, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      console.log(response);
+      setLoading(false);
+      return response.data;
+    } catch (error) {
+      console.log(error);
+      setLoading(false);
+      showToast("error", `${error?.response?.data?.message || error.message}`);
+      // rethrow so callers can react if needed
+      throw error;
+    }
+  };
+
   const createSheet = async (credentials) => {
     setLoading(true);
     const token = localStorage.getItem("token");
@@ -405,6 +427,7 @@ const fetchMembers = async () => {
         createTask,
         dndOrdersSheets,
         dndOrdersTasks,
+        dndOrdersColumns,
         members,
         changeCompany,
         showToast,

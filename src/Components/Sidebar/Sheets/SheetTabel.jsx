@@ -69,7 +69,7 @@ const SheetTabel = ({
   const [chatSidebarOpen, setChatSidebarOpen] = useState(false);
   const [chatTask, setChatTask] = useState(null);
   const token = localStorage.getItem("token");
-  const { createColumn, dndOrdersTasks } = useContext(AuthContext);
+  const { createColumn, dndOrdersTasks, dndOrdersColumns } = useContext(AuthContext);
 
   // New: queryClient to invalidate other sheet queries after updates
 
@@ -325,16 +325,59 @@ const SheetTabel = ({
         const resultData = { taskId: taskIds, orders };
         dndOrdersTasks(resultData);
       } else if (type === "COLUMN") {
-        // Handle column reordering
-        const reorderedColumns = Array.from(sheets.columns);
-        const [movedColumn] = reorderedColumns.splice(source.index, 1);
-        reorderedColumns.splice(destination.index, 0, movedColumn);
+        // Handle column reordering:
+        // - source.index/destination.index are indices among visibleColumns,
+        // - compute moved column from visibleColumns, then reorder full sheets.columns array accordingly.
+        try {
+          const visible = visibleColumns;
+          const movedColumn = visible?.[source.index];
+          if (!movedColumn) return;
 
-        setColumnOrder(reorderedColumns.map((_, idx) => idx)); // Update columnOrder based on the new order
-        sheets.columns = reorderedColumns; // Update the columns array locally
-      }
+          // start from the full columns list and remove the moved column
+          let newColumns = (Array.isArray(sheets?.columns) ? sheets.columns.slice() : []).filter(
+            (c) => c && c.id !== movedColumn.id
+          );
+
+          // Determine insertion point by the destination visible column
+          const destinationVisible = visible?.[destination.index];
+          if (destinationVisible) {
+            const destIndexAll = newColumns.findIndex((c) => c.id === destinationVisible.id);
+            if (destIndexAll === -1) {
+              newColumns.push(movedColumn);
+            } else {
+              newColumns.splice(destIndexAll, 0, movedColumn);
+            }
+          } else {
+            // fallback: append at end
+            newColumns.push(movedColumn);
+          }
+
+          // optimistic local update
+          setColumnOrder(newColumns.map((_, idx) => idx));
+          // update local sheets.columns for immediate UI
+          if (sheets) sheets.columns = newColumns;
+
+          // prepare payload and call API to persist new order
+          const columnIds = newColumns.map((c) => c.id);
+          const orders = newColumns.map((_, idx) => idx + 1);
+          const payload = { columnIds, orders };
+          // call context API and invalidate queries afterwards
+          (async () => {
+            try {
+              await dndOrdersColumns(payload);
+              await queryClient.invalidateQueries(["sheets", sheetId]);
+              await queryClient.invalidateQueries(["sheets"]);
+            } catch (err) {
+              // on error, refetch to restore server state
+              await queryClient.invalidateQueries(["sheets", sheetId]);
+            }
+          })();
+        } catch (e) {
+          console.error("Error handling column reorder:", e);
+        }
+       }
     },
-    [filteredTasks, sheets, dndOrdersTasks]
+    [filteredTasks, sheets, dndOrdersTasks, dndOrdersColumns, visibleColumns, queryClient, sheetId]
   );
 
   // Handle task changes
@@ -568,13 +611,31 @@ const SheetTabel = ({
 
   // Track the last created task id to autofocus
   const lastCreatedTaskIdRef = useRef(null);
+  // Ensure we only auto-focus once (cleared after consumed) to avoid stealing focus during searches
+  const autoFocusConsumedRef = useRef(false);
 
   useEffect(() => {
     if (isCreatingTask === false && filteredTasks.length > 0) {
       // Find the newest task (assuming sorted newest first)
       lastCreatedTaskIdRef.current = filteredTasks[0]?.id;
+      autoFocusConsumedRef.current = false; // mark available for consumption
     }
   }, [isCreatingTask, filteredTasks]);
+
+  // When the first task equals the last-created id, mark autofocus consumed shortly after rendering.
+  // This prevents autofocus from retriggering on unrelated re-renders (search, filters).
+  useEffect(() => {
+    const firstId = filteredTasks?.[0]?.id;
+    if (!firstId || !lastCreatedTaskIdRef.current) return;
+    if (firstId === lastCreatedTaskIdRef.current && !autoFocusConsumedRef.current) {
+      // give child a small window to focus, then mark consumed
+      const t = setTimeout(() => {
+        autoFocusConsumedRef.current = true;
+        lastCreatedTaskIdRef.current = null;
+      }, 350);
+      return () => clearTimeout(t);
+    }
+  }, [filteredTasks]);
 
   // Add this effect to close the filters dropdown when clicking outside
   useEffect(() => {
@@ -1019,7 +1080,8 @@ const SheetTabel = ({
                             onOpenChat={() => handleOpenChatSidebar(task)}
                           autoFocus={
                             task.id === lastCreatedTaskIdRef.current &&
-                            index === 0
+                            index === 0 &&
+                            !autoFocusConsumedRef.current
                           }
                           isDeleting={deletingTaskIds.includes(task.id)}
                           />

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axiosInstance from "../AxiosInctance/AxiosInctance";
 import testMemImg from "../assets/default-avatar-icon-of-social-media-user-vector.jpg";
 import { Link, useNavigate, useLocation } from "react-router-dom";
@@ -53,6 +53,8 @@ function ModernPagination({ total, page, pageSize, onPageChange, onPageSizeChang
 }
 
 const MembersPage = () => {
+	// query client for invalidation so sidebar updates after edits
+	const queryClient = useQueryClient();
 	const token = localStorage.getItem("token");
 	const navigate = useNavigate();
 	const { search } = useLocation();
@@ -261,7 +263,11 @@ const MembersPage = () => {
 				},
 				{ headers: { Authorization: `Bearer ${token}` } }
 			);
+			// refresh current paginated view
 			await refetch();
+			// ensure sidebar and other member lists refetch
+			queryClient.invalidateQueries({ queryKey: ["members"] });
+			queryClient.invalidateQueries({ queryKey: ["members-page"] });
 			closeEditModal();
 		} catch (err) {
 			setEditError("Failed to update member. Try again.");

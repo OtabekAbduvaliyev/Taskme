@@ -58,12 +58,17 @@ const Viewers = ({ role }) => {
               </button>
             )}
           </div>
-          {viewerMembers.length > 0 ? (
+          {isLoading ? (
+            <div className="text-gray2 text-center py-4">Loading viewers...</div>
+          ) : error ? (
+            <div className="text-red-400 text-center py-4">Failed to load viewers</div>
+          ) : viewerMembers.length > 0 ? (
             viewerMembers.map((member, i) => (
               <div key={i} className="secLine my-[12px] space-y-[4px]">
-                <div 
-                onClick={() => navigate("/dashboard/members?type=VIEWERS")}
-                 className="viewer flex items-center gap-[12px] cursor-pointer">
+                <div
+                  onClick={() => navigate("/dashboard/members?type=VIEWERS")}
+                  className="viewer flex items-center gap-[12px] cursor-pointer"
+                >
                   <div className="memImg">
                     <img
                       src={

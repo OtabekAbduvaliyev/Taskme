@@ -539,7 +539,7 @@ const {
                   {/* Filters button moved here next to search input */}
                   <div
                     ref={filtersButtonRef}
-                    className="text-white flex items-center gap-[6px] hover:cursor-pointer px-3 py-2 rounded bg-grayDash"
+                    className="text-white flex items-center gap-[6px] hover:cursor-pointer px-3 py-2 rounded bg-grayDash hover:bg-pink2 duration-200"
                     onClick={toggleFiltersPanel}
                   >
                     <CiFilter className="text-[16px]" />

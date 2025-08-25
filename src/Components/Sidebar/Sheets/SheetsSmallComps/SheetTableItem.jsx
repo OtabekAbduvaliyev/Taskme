@@ -539,15 +539,59 @@ const SheetTableItem = ({
   // Ref for first input
   const firstInputRef = useRef(null);
 
+  // Run auto-focus/select only once per mounted item to avoid re-selecting on unrelated re-renders
+  const hasAutoFocusedRef = useRef(false);
   useEffect(() => {
-    if (autoFocus && firstInputRef.current) {
-      firstInputRef.current.focus();
-      // Optionally select all text:
-      if (typeof firstInputRef.current.select === "function") {
-        firstInputRef.current.select();
+    if (!autoFocus || hasAutoFocusedRef.current || !firstInputRef.current) return;
+
+    // Don't steal focus if the user is actively typing into another input/textarea/contentEditable
+    try {
+      const active = typeof document !== "undefined" ? document.activeElement : null;
+      if (active) {
+        const isTextEntry =
+          active.tagName === "INPUT" ||
+          active.tagName === "TEXTAREA" ||
+          active.isContentEditable;
+        // allow autofocus only if the active element is inside this row (so the user is already interacting here)
+        if (isTextEntry) {
+          const insideThisRow =
+            typeof active.closest === "function" &&
+            active.closest(`[data-task-id="${task?.id}"]`);
+          if (!insideThisRow) {
+            return; // skip autofocus to avoid interrupting the user's typing (e.g. search)
+          }
+        }
       }
+    } catch (e) {
+      // ignore DOM access errors and proceed
     }
-  }, [autoFocus]);
+
+    hasAutoFocusedRef.current = true;
+    try {
+      const el = firstInputRef.current;
+      el.focus();
+      // select briefly so user sees focus, then reliably move caret to end
+      if (typeof el.select === "function") el.select();
+      // slightly longer delay to improve reliability across environments
+      setTimeout(() => {
+        try {
+          if (el && typeof el.setSelectionRange === "function") {
+            const len = (el.value || "").length;
+            // use requestAnimationFrame for best timing
+            requestAnimationFrame(() => {
+              try {
+                el.setSelectionRange(len, len);
+              } catch (_) {}
+            });
+          }
+        } catch (_) {
+          // ignore environment-specific issues
+        }
+      }, 200);
+    } catch (_) {
+      // ignore focus errors
+    }
+  }, [autoFocus, task?.id]);
 
   // Use same host pattern as other places: https://eventify.preview.uz/<path>
   const getFileUrl = (file) => {
@@ -1199,7 +1243,7 @@ const SheetTableItem = ({
             setModalTab("upload");
             setShowFileModal(true);
           }}
-          className="flex items-center gap-2 text-gray4 px-2 py-1 rounded hover:bg-[#2A2D36]"
+          className="flex items-center gap-2 text-gray4 px-2 py-1 rounded hover:bg-grayDash"
           title="No files — upload"
         >
           <FaRegFileAlt className="w-4 h-4" />
@@ -1285,12 +1329,13 @@ const SheetTableItem = ({
     <Draggable draggableId={task.id.toString()} index={index}>
       {(provided) => (
         <tr
-          // row controls hover color; cells use group-hover to respond
-          className={`task flex text-white border-[black] font-radioCanada group hover:bg-[#2A2D36] transition-colors ${isDeleting ? "opacity-60 pointer-events-none" : ""}`}
-          ref={provided.innerRef}
-          {...provided.draggableProps}
-          {...provided.dragHandleProps}
-        >
+          data-task-id={task.id}
+           // row controls hover color; cells use group-hover to respond
+           className={`task flex text-white border-[black] font-radioCanada group hover:bg-[#2A2D36] transition-colors ${isDeleting ? "opacity-60 pointer-events-none" : ""}`}
+           ref={provided.innerRef}
+           {...provided.draggableProps}
+           {...provided.dragHandleProps}
+         >
           {/* Sticky checkbox cell */}
           <td className="w-[48px] py-[16px] px-[11px] flex items-center justify-center border-r border-r-[black] sticky left-0 bg-grayDash group-hover:bg-[#2A2D36] z-20">
             <label className="relative flex items-center cursor-pointer select-none w-[20px] h-[20px] text-gray4">

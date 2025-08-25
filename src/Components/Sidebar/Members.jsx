@@ -29,8 +29,12 @@ const Members = ({ role }) => {
           Authorization: `Bearer ${token}`,
         },
       });
-      // original API shape returned response.data.members
-      return response.data?.members || [];
+      // normalize possible response shapes into an array
+      const raw = response.data;
+      if (Array.isArray(raw)) return raw;
+      if (Array.isArray(raw?.members)) return raw.members;
+      // fallback to empty array
+      return [];
     },
     // enabled: role != "member" && !!token,
     staleTime: 300000,
@@ -67,8 +71,7 @@ const Members = ({ role }) => {
   //       <div className="text-white text-center">Loading members...</div>
   //     </div>
   //   );
-  // }
-
+  // 
   return (
     <div>
       {role === "author" || role === "admin" ? (
@@ -98,9 +101,9 @@ const Members = ({ role }) => {
             }}
           >
             {isLoading ? (
-              <div className="bg-grayDash py-3 px-3 rounded-[17px] shadow-xl">
-                <div className="text-white text-center py-4">Loading members...</div>
-              </div>
+              <div className="text-gray2 text-center py-4">Loading members...</div>
+            ) : error ? (
+              <div className="text-red-400 text-center py-4">Failed to load members</div>
             ) : displayedMembers.length > 0 ? (
               displayedMembers.map((member, index) => (
                 // make the whole member row clickable and accessible
