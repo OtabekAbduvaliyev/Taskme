@@ -76,12 +76,20 @@ const Viewers = ({ role }) => {
                           ? `https://eventify.preview.uz/${member.user.avatar?.path}`
                           : testMemImg
                       }
-                      alt={member.user.firstName || "Viewer"}
+                      alt={
+                        member.user?.firstName
+                          ? `${member.user.firstName} ${member.user.lastName || ""}`.trim()
+                          : "Unknown User"
+                      }
                       className="w-6 h-6 sm:w-[28.8px] sm:h-[28.8px] rounded-full object-cover"
                     />
                   </div>
                   <div className="memText">
-                    <p className="text-[13px] sm:text-[14px] md:text-[15px] text-white">{`${member.user.firstName} ${member.user.lastName}`}</p>
+                    <p className="text-[13px] sm:text-[14px] md:text-[15px] text-white">
+                      {member.user?.firstName
+                        ? `${member.user.firstName} ${member.user.lastName || ""}`.trim()
+                        : "Unknown User"}
+                    </p>
                     <p
                       className="text-[10px] sm:text-[11px] md:text-[12px] text-gray2"
                       style={{
