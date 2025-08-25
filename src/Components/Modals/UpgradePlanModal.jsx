@@ -1,8 +1,12 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { createPortal } from "react-dom";
+import useEscapeKey from "./hooks/useEscapeKey";
 
 const UpgradePlanModal = ({ isOpen, onClose, message }) => {
+  // Handle ESC key press
+  useEscapeKey(isOpen, onClose);
+
   if (!isOpen) return null;
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">

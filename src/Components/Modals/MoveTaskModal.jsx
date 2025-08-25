@@ -4,13 +4,18 @@ import { FiX } from 'react-icons/fi';
 import { GoFileSymlinkFile } from "react-icons/go";
 import axiosInstance from '../../AxiosInctance/AxiosInctance';
 import CustomSelect from '../Common/CustomSelect';
+import useEscapeKey from './hooks/useEscapeKey';
 
 const MoveTaskModal = ({ isOpen, onClose, taskId, onTaskMoved }) => {
   const [workspaces, setWorkspaces] = useState([]);
   const [sheets, setSheets] = useState([]);
   const [selectedWorkspace, setSelectedWorkspace] = useState(null);
   const [selectedSheet, setSelectedSheet] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
   const token = localStorage.getItem("token");
+
+  // Handle ESC key press - disabled during loading
+  useEscapeKey(isOpen, onClose, isLoading);
 
   useEffect(() => {
     if (isOpen) {
@@ -51,8 +56,9 @@ const MoveTaskModal = ({ isOpen, onClose, taskId, onTaskMoved }) => {
   };
 
   const handleMove = async () => {
-    if (!selectedSheet) return;
+    if (!selectedSheet || isLoading) return;
 
+    setIsLoading(true);
     try {
       await axiosInstance.patch('/task/move', {
         taskId: taskId,
@@ -71,6 +77,8 @@ const MoveTaskModal = ({ isOpen, onClose, taskId, onTaskMoved }) => {
       onClose();
     } catch (error) {
       console.error('Error moving task:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -174,13 +182,13 @@ const MoveTaskModal = ({ isOpen, onClose, taskId, onTaskMoved }) => {
                     Cancel
                   </motion.button>
                   <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
+                    whileHover={{ scale: isLoading ? 1 : 1.02 }}
+                    whileTap={{ scale: isLoading ? 1 : 0.98 }}
                     onClick={handleMove}
-                    disabled={!selectedSheet}
-                    className={`flex-1 bg-gradient-to-r from-pink2 to-pink2/90 text-white rounded-xl py-3.5 font-medium transition-all duration-300 hover:shadow-lg hover:shadow-pink2/20 relative overflow-hidden group ${!selectedSheet ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    disabled={!selectedSheet || isLoading}
+                    className={`flex-1 bg-gradient-to-r from-pink2 to-pink2/90 text-white rounded-xl py-3.5 font-medium transition-all duration-300 hover:shadow-lg hover:shadow-pink2/20 relative overflow-hidden group ${!selectedSheet || isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
-                    <span className="relative z-10">Move</span>
+                    <span className="relative z-10">{isLoading ? 'Moving...' : 'Move'}</span>
                     <div className="absolute inset-0 bg-gradient-to-r from-pink2/0 via-white/20 to-pink2/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
                   </motion.button>
                 </div>

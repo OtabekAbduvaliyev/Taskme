@@ -5,6 +5,8 @@ import axiosInstance from "../../AxiosInctance/AxiosInctance";
 import ReactDOM from "react-dom";
 import { AuthContext } from "../../Auth/AuthContext";
 
+
+import useEscapeKey from "./hooks/useEscapeKey";
 const InviteMemberModal = ({ isOpen, onClose }) => {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -23,6 +25,8 @@ const InviteMemberModal = ({ isOpen, onClose }) => {
 
   // get global showToast from AuthContext
   const { showToast } = useContext(AuthContext);
+  // Handle ESC key press - disabled during loading to prevent accidental closes
+  useEscapeKey(isOpen, onClose, isLoading);
 
   // Fetch available workspaces (exposed so it can be refetched)
   const fetchWorkspaces = async () => {
