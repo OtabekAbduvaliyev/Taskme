@@ -105,6 +105,7 @@ const NotificationsPage = () => {
           notif.id === notificationId ? { ...notif, isRead: true } : notif
         )
       );
+      try { window.dispatchEvent(new CustomEvent("notification:read", { detail: { id: notificationId } })); } catch (e) {}
     } catch (error) {
       console.error("Error marking notification as read:", error);
     }
@@ -118,6 +119,7 @@ const NotificationsPage = () => {
       setNotifications((prev) =>
         prev.map((notif) => ({ ...notif, isRead: true }))
       );
+      try { window.dispatchEvent(new CustomEvent("notifications:bulkRead")); } catch (e) {}
     } catch (error) {
       console.error("Error marking all notifications as read:", error);
     }

@@ -36,7 +36,8 @@ const Members = ({ role }) => {
       // fallback to empty array
       return [];
     },
-    // enabled: role != "member" && !!token,
+    enabled: !!token && (role === "author" || role === "admin"),
+    retry: false,
     staleTime: 300000,
     cacheTime: 600000, // cache for 10 minutes
     refetchOnWindowFocus: false, // don't refetch when window/tab is focused

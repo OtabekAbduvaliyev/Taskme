@@ -44,6 +44,28 @@ const Sheets = () => {
   const token = localStorage.getItem("token");
   const navigate = useNavigate();
   const { createTask } = useContext(AuthContext);
+  // Fetch live user info to determine role and permissions dynamically
+  const {
+    data: userInfoRes,
+  } = useQuery({
+    queryKey: ["userinfo"],
+    queryFn: async () => await axiosInstance.get("/user/info", { headers: { Authorization: `Bearer ${token}` } }),
+    staleTime: 300000,
+  });
+  const userInfo = userInfoRes?.data || {};
+  const selectedRole = Array.isArray(userInfo?.roles)
+    ? userInfo.roles.find((r) => r?.id === userInfo?.selectedRole)
+    : null;
+  const isAuthor = String(selectedRole?.type || '').toUpperCase() === 'AUTHOR';
+  // Permissions for non-authors live under role.member.permissions
+  const rawPermissions = Array.isArray(selectedRole?.member?.permissions)
+    ? selectedRole.member.permissions
+    : [];
+  const normPermissions = rawPermissions.map((p) => String(p || '').toLowerCase());
+  const hasAll = isAuthor || normPermissions.includes('all');
+  const canCreate = hasAll || normPermissions.includes('create');
+  const canEdit = hasAll || normPermissions.includes('update'); // NEW: allow editing when 'update' permission present
+  const canRead = hasAll || normPermissions.includes('read');
   // Read URL search params first so we can initialize state from them
   const [searchParams, setSearchParams] = useSearchParams();
   const searchQuery = searchParams.get("search") || "";
@@ -88,7 +110,7 @@ const Sheets = () => {
       return response.data;
     },
     staleTime: 300000,
-    enabled: !!id,
+    enabled: !!id && canRead,
   });
 
   useEffect(() => {
@@ -215,6 +237,7 @@ const {
   const [isCreatingTask, setIsCreatingTask] = useState(false);
 
   const addNewTask = async () => {
+    if (!canCreate) return;
     setIsCreatingTask(true);
     const newTask = {
       sheetId: sheetId, // unique ID for each task
@@ -485,22 +508,24 @@ const {
                   </Link>
                 );
               })}
-              <div
-                className="sheet flex items-center gap-[6px] bg-grayDash rounded-[9px] hover:bg-gray transition-all duration-1000 px-[6px] py-[7px] cursor-pointer"
-                onClick={() => {
-                  if (sheetLimitReached) {
-                    setUpgradeModalOpen(true);
-                  } else {
-                    handleToggleModal();
-                  }
-                }}
-              >
-                <IoAddCircleOutline className="text-[18px] sm:text-[20px]" />
-              </div>
+              {canCreate && (
+                <div
+                  className="sheet flex items-center gap-[6px] bg-grayDash rounded-[9px] hover:bg-gray transition-all duration-1000 px-[6px] py-[7px] cursor-pointer"
+                  onClick={() => {
+                    if (sheetLimitReached) {
+                      setUpgradeModalOpen(true);
+                    } else {
+                      handleToggleModal();
+                    }
+                  }}
+                >
+                  <IoAddCircleOutline className="text-[18px] sm:text-[20px]" />
+                </div>
+              )}
             </div>
 
             {/* Show limit hint when reached */}
-            {sheetLimitReached && (
+            {sheetLimitReached && canCreate && (
               <div className="mt-2">
                 <p className="text-red-400 text-xs">
                   Sheet limit reached for your plan ({displayMaxSheets}). Upgrade to add more.
@@ -520,18 +545,20 @@ const {
               // top-[70px] may need adjustment depending on Pabs height
               >
                 <div className="flex gap-[12px] sm:gap-[18px] w-full sm:w-auto">
-                  <div className="newProject">
-                    <button
-                      className="flex bg-white hover:bg-pink2 hover:text-white duration-200 py-[10px] sm:py-[11.5px] px-[10px] sm:px-[12px] items-center rounded-[9px] text-pink2 gap-[8px] sm:gap-[10px]"
-                      onClick={addNewTask}
-                      disabled={isCreatingTask}
-                    >
-                      <IoAddCircleOutline className="text-[20px] sm:text-[22px]" />
-                      <p className="font-[500] text-[13px] sm:text-[14px]">
-                        {isCreatingTask ? "Creating..." : "New Task"}
-                      </p>
-                    </button>
-                  </div>
+                  {canCreate && (
+                    <div className="newProject">
+                      <button
+                        className="flex bg-white hover:bg-pink2 hover:text-white duration-200 py-[10px] sm:py-[11.5px] px-[10px] sm:px-[12px] items-center rounded-[9px] text-pink2 gap-[8px] sm:gap-[10px]"
+                        onClick={addNewTask}
+                        disabled={isCreatingTask}
+                      >
+                        <IoAddCircleOutline className="text-[20px] sm:text-[22px]" />
+                        <p className="font-[500] text-[13px] sm:text-[14px]">
+                          {isCreatingTask ? "Creating..." : "New Task"}
+                        </p>
+                      </button>
+                    </div>
+                  )}
                   <div className="search inputsr">
                     <Input
                       prefix={<IoSearch className="text-[18px] sm:text-[21px]" />}
@@ -626,31 +653,56 @@ const {
                       
                       {/* Add Sheet Button - similar to addWorkspaceButton */}
                       <div className="addSheetButton max-w-md mx-auto">
-                        <button
-                          className="flex items-center gap-3 text-white px-[19px] bg-white w-full justify-between py-[12px] rounded-[9px] transition-all duration-200"
-                          onClick={() => {
-                            if (sheetLimitReached) {
-                              setUpgradeModalOpen(true);
-                            } else {
-                              handleToggleModal();
-                            }
-                          }}
-                          disabled={false}
-                        >
-                          <IoAddCircleOutline className="text-gray4 text-[20px]" />
-                          <p className="text-gray4 text-[14px] font-medium">
-                            Create first Sheet
-                          </p>
-                          {currentPlan && (
-                            <p className="text-pink2 text-[13px]">
-                              {currentPlan.name}
-                              {sheetLimitReached ? " (limit reached)" : ""}
+                        {canCreate ? (
+                          <button
+                            className="flex items-center gap-3 text-white px-[19px] bg-white w-full justify-between py-[12px] rounded-[9px] transition-all duration-200"
+                            onClick={() => {
+                              if (sheetLimitReached) {
+                                setUpgradeModalOpen(true);
+                              } else {
+                                handleToggleModal();
+                              }
+                            }}
+                            aria-disabled={sheetLimitReached}
+                          >
+                            <IoAddCircleOutline className="text-gray4 text-[20px]" />
+                            <p className="text-gray4 text-[14px] font-medium">
+                              Create first Sheet
                             </p>
-                          )}
-                        </button>
-                        {sheetLimitReached && (
+                            {currentPlan && (
+                              <p className="text-pink2 text-[13px]">
+                                {currentPlan.name}
+                                {sheetLimitReached ? " (limit reached)" : ""}
+                              </p>
+                            )}
+                          </button>
+                        ) : (
+                          <button
+                            className="flex items-center gap-3 text-white px-[19px] bg-white/10 opacity-50 w-full justify-between py-[12px] rounded-[9px] transition-all duration-200 cursor-not-allowed"
+                            disabled
+                            title="You don't have permission to create sheets"
+                          >
+                            <IoAddCircleOutline className="text-gray4 text-[20px]" />
+                            <p className="text-gray4 text-[14px] font-medium">
+                              Create first Sheet
+                            </p>
+                            {currentPlan && (
+                              <p className="text-pink2 text-[13px]">
+                                {currentPlan.name}
+                              </p>
+                            )}
+                          </button>
+                        )}
+
+                        {/* explanatory hint when creation is disabled */}
+                        {!canCreate && (
+                          <p className="text-white text-xs mt-2">
+                            You don't have permission to create sheets in this workspace.
+                          </p>
+                        )}
+                        {canCreate && sheetLimitReached && (
                           <p className="text-red-400 text-xs mt-2">
-                            Sheet limit reached for your plan ({displayMaxSheets}). Upgrade to add more.
+                            Sheet limit reached for your plan ({displayMaxSheets}). <button onClick={() => setUpgradeModalOpen(true)} className="underline">Upgrade</button> to add more.
                           </p>
                         )}
                       </div>
@@ -687,8 +739,18 @@ const {
                         filtersOpen={filtersOpen}
                         onToggleFilters={toggleFiltersPanel}
                         filtersButtonRef={filtersButtonRef}
-                      />
-                    )}
+                        // NEW props to centralize sheet creation
+                        allowCreate={canCreate && !sheetLimitReached}
+                        onCreate={() => {
+                          if (sheetLimitReached) {
+                            setUpgradeModalOpen(true);
+                          } else {
+                            handleToggleModal();
+                          }
+                        }}
+                        canEdit={canEdit} // NEW: tells table/items whether editing is permitted
+                       />
+                     )}
                     {view === "list" && (
                       <div className="mt-[26px] flex items-center justify-center">
                         <div className="bg-grayDash rounded-[12px] p-8 flex flex-col items-center gap-3 text-center max-w-md">

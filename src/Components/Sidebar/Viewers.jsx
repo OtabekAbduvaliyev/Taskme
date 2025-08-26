@@ -12,7 +12,7 @@ const Viewers = ({ role }) => {
     error,
     data: membersData,
   } = useQuery({
-    queryKey: ["members"], // use same non-paginated key for sidebar
+    queryKey: ["members_sidebar_viewers"],
     queryFn: async () => {
       // sidebar uses non-paginated endpoint
       const response = await axiosInstance.get("/member", {
@@ -24,10 +24,12 @@ const Viewers = ({ role }) => {
       // return the raw data and normalize in effect below
       return response.data;
     },
-    enabled: role != "member" && !!token,
+    enabled: !!token && (role === "author" || role === "admin"),
+    retry: false,
     staleTime: 300000,
-    cacheTime: 600000, // cache for 10 minutes
-    refetchOnWindowFocus: false, // don't refetch when window/tab is focused
+    cacheTime: 600000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
   const [members, setMembers] = useState([]);
   useEffect(() => {

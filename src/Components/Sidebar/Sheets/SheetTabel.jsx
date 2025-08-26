@@ -39,6 +39,9 @@ const SheetTabel = ({
   filtersOpen = false, // controlled by parent; parent renders the Filters button
   onToggleFilters, // optional toggle handler from parent
   filtersButtonRef = null, // ref to anchor portal to the parent Filters button (default null)
+  allowCreate = true, // new: control whether the table renders its own create button
+  onCreate = () => {}, // new: handler to open centralized create modal
+  canEdit = true, // NEW: whether task columns are editable
 }) => {
   // track which task ids are currently being deleted (shows UI & disables interactions)
   const [deletingTaskIds, setDeletingTaskIds] = useState([]);
@@ -1116,8 +1119,10 @@ const SheetTabel = ({
                             <div
                               className="w-[44px] sm:w-[50px] flex items-end justify-center py-[12px] sm:py-[16px] border-r border-[black] px-[8px] sm:px-[11px] cursor-pointer bg-grayDash sticky right-0 top-0"
                               onClick={handleToggleModal}
+                              role="button"
+                              aria-disabled={!allowCreate}
                             >
-                              <IoAddCircleOutline className="text-[18px] sm:text-[20px] text-gray4" />
+                              <IoAddCircleOutline className={`text-[18px] sm:text-[20px] ${allowCreate ? 'text-gray4' : 'text-gray4/60 pointer-events-none'}`} />
                             </div>
                           </div>
                         )}
@@ -1149,9 +1154,10 @@ const SheetTabel = ({
                             }
                             isDeleting={deletingTaskIds.includes(task.id)}
                             showLastUpdateColumn={showLastUpdateColumn}
+                            canEdit={canEdit} // NEW: pass down edit permission
                           />
                         </tr>
-                      ))}
+                      ))} 
                       {provided.placeholder}
                     </tbody>
                   )}

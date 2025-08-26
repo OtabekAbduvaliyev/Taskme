@@ -11,6 +11,10 @@ const Home = () => {
     }
   }, [navigate]);
 
+  // Add shared button styles (default + hover)
+  const btnDefault = 'px-7 py-2 rounded-xl bg-white text-pink2 font-bold text-lg shadow-lg hover:bg-pink2 hover:text-white transition-all duration-300';
+  const btnAlt = 'px-7 py-2 rounded-xl bg-[#23272F] text-white font-bold text-lg border border-pink2 shadow-lg hover:bg-pink2 hover:text-white transition-all duration-300';
+
   return (
     <div className="min-h-screen bg-[#181A20] flex items-center justify-center relative overflow-hidden">
       {/* Modern gradient and geometric background */}
@@ -46,13 +50,13 @@ const Home = () => {
         <div className="mt-2 flex flex-col sm:flex-row gap-4 justify-center items-center">
           <a
             href="/login"
-            className="px-7 py-2 rounded-xl bg-gradient-to-r from-pink2 to-pink2/80 text-white font-bold text-lg shadow-lg  hover:shadow-pink2/30 transition-all duration-300"
+            className={btnDefault}
           >
             Login
           </a>
           <a
             href="/register"
-            className="px-7 py-2 rounded-xl bg-[#23272F] text-white font-bold text-lg border-1 border-pink2 shadow-lg hover:bg-pink2 hover:text-white transition-all duration-300"
+            className={btnAlt}
           >
             Register
           </a>

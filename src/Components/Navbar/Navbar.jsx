@@ -79,6 +79,29 @@ const Navbar = ({ onToggleSidebar, sidebarOpen }) => {
     return () => clearInterval(interval);
   }, [token]);
 
+  // Listen for read events emitted by other components (NotificationDetailModal / NotificationsPage)
+  useEffect(() => {
+    const onSingleRead = (e) => {
+      const id = e?.detail?.id;
+      if (!id) return;
+      setNotifications(prev => {
+        const next = prev.map(n => n.id === id ? { ...n, isRead: true } : n);
+        return next;
+      });
+      setPreviousCount(prev => Math.max(0, prev - 1));
+    };
+    const onBulkRead = () => {
+      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+      setPreviousCount(0);
+    };
+    window.addEventListener("notification:read", onSingleRead);
+    window.addEventListener("notifications:bulkRead", onBulkRead);
+    return () => {
+      window.removeEventListener("notification:read", onSingleRead);
+      window.removeEventListener("notifications:bulkRead", onBulkRead);
+    };
+  }, []);
+
   useEffect(() => {
     const handleClickOutside = (event) => {
       const target = event.target;
@@ -240,6 +263,18 @@ const Navbar = ({ onToggleSidebar, sidebarOpen }) => {
     if (user?.roles && user?.selectedRole) {
       const foundRole = user.roles.find((i) => user.selectedRole === i.id);
       setSelectedRole(foundRole);
+      // Persist minimal company/role info for global guards
+      try {
+        const hasCompany = !!(foundRole && foundRole.company && (foundRole.company.id || foundRole.company._id));
+        localStorage.setItem("hasCompany", JSON.stringify(hasCompany));
+        const roleType = (foundRole && foundRole.type ? String(foundRole.type).toLowerCase() : "");
+        localStorage.setItem("selectedRoleType", roleType);
+        let permissions = Array.isArray(foundRole?.permissions) ? foundRole.permissions : [];
+        if ((roleType === 'author') && permissions.length === 0) {
+          permissions = ['all'];
+        }
+        localStorage.setItem("selectedRolePermissions", JSON.stringify(permissions));
+      } catch {}
     }
     // Only run when user changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -445,12 +480,13 @@ const Navbar = ({ onToggleSidebar, sidebarOpen }) => {
                 <div className="flex gap-[3px]">
                   {/* company name uses same color as logout button */}
                   <span className="text-[10px] lg:text-[11px] font-semibold text-pink2">
-                    {selectedRole?.company?.name}
+                    
+                    {selectedRole?.company?.name || "Nocompany"}
                   </span>
                   <p className="text-[10px] lg:text-[11px] text-white">
                     {selectedRole?.company?.plan
                       ? selectedRole?.company?.plan?.name
-                      : "Free"}
+                      : (selectedRole?.company?.name ? "Free" : "")}
                   </p>
                 </div>
               </div>

@@ -195,6 +195,9 @@ const SuccessModal = ({ open, plan, onClose, onStart }) => {
 };
 
 const Subscriptions = () => {
+  const selectedRoleType = (() => {
+    try { return (localStorage.getItem('selectedRoleType') || '').toLowerCase(); } catch { return ''; }
+  })();
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedPlanId, setSelectedPlanId] = useState(null);
@@ -206,6 +209,14 @@ const Subscriptions = () => {
   // NEW: success modal state
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successPayload, setSuccessPayload] = useState(null);
+  // Restrict non-authors from viewing subscriptions page content
+  if (selectedRoleType !== 'author') {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center text-gray2">
+        Only company authors can view and manage plans.
+      </div>
+    );
+  }
 
   // NEW: processing/error state for free-plan flow
   const [processingFree, setProcessingFree] = useState(false);

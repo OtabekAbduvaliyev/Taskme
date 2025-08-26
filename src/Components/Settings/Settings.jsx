@@ -13,6 +13,11 @@ const Settings = () => {
   const [activeTab, setActiveTab] = useState('profile');
   const [isLoading, setIsLoading] = useState(true);
   const [userData, setUserData] = useState(null);
+    const inputBase = "w-full rounded-lg py-2 px-3 transition";
+  const inputActive = "bg-white text-pink2 border border-pink2 hover:bg-pink2 hover:text-white focus:bg-pink2 focus:text-white";
+  const inputDisabled = "bg-[#0B0C0F] text-white border border-[#222] opacity-70 cursor-not-allowed";
+  const btnDefault = 'px-3 py-2 rounded-md font-medium transition bg-white text-pink2 hover:bg-pink2 hover:text-white';
+
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
@@ -163,9 +168,13 @@ const Settings = () => {
   const [plans, setPlans] = useState([]);
   const [currentPlan, setCurrentPlan] = useState(null);
   const [plansLoading, setPlansLoading] = useState(true);
+  const selectedRoleType = (() => {
+    try { return (localStorage.getItem('selectedRoleType') || '').toLowerCase(); } catch { return ''; }
+  })();
 
   useEffect(() => {
     if (activeTab !== "upgrade") return;
+    if (selectedRoleType !== 'author') return; // restrict plans to authors only
     const token = localStorage.getItem("token");
     setPlansLoading(true);
     Promise.all([
@@ -181,7 +190,7 @@ const Settings = () => {
         setPlans(Array.isArray(plansRes.data) ? plansRes.data : []);
       })
       .finally(() => setPlansLoading(false));
-  }, [activeTab]);
+  }, [activeTab, selectedRoleType]);
 
   // Company tab state
   const [companyData, setCompanyData] = useState(null);
@@ -190,6 +199,11 @@ const Settings = () => {
   });
   const [companyLoading, setCompanyLoading] = useState(false);
   const [companyEdit, setCompanyEdit] = useState(false);
+
+  // NEW: create company modal state + loading + input
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createCompanyName, setCreateCompanyName] = useState('');
+  const [createLoading, setCreateLoading] = useState(false);
 
   useEffect(() => {
     if (activeTab !== "company") return;
@@ -227,6 +241,37 @@ const Settings = () => {
     }));
   };
 
+  // NEW: create company handler
+  const handleCreateCompany = async () => {
+    if (!createCompanyName.trim()) return;
+    setCreateLoading(true);
+    try {
+      const res = await axiosInstance.post('/company', { name: createCompanyName.trim() }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      // assume API returns created company object
+      setCompanyData(res.data);
+      setCompanyForm({ name: res.data.name || '' });
+      setShowCreateModal(false);
+      setCreateCompanyName('');
+      // Queue success toast and navigate + refresh to apply new company context globally
+      try {
+        localStorage.setItem('postReloadToast', JSON.stringify({ type: 'success', message: 'Company created successfully' }));
+      } catch {}
+      navigate('/dashboard', { replace: true });
+      try { window.location.reload(); } catch {}
+    } catch (err) {
+      console.error('Error creating company:', err);
+      // Queue error toast and keep user in place (no reload)
+      try {
+        const message = err?.response?.data?.message || 'Error creating company';
+        localStorage.setItem('postReloadToast', JSON.stringify({ type: 'error', message }));
+      } catch {}
+    } finally {
+      setCreateLoading(false);
+    }
+  };
+
   const handleCompanyUpdate = async () => {
     if (!companyData?.id) return;
     setCompanyLoading(true);
@@ -259,10 +304,19 @@ const Settings = () => {
       });
       setCompanyData(null);
       setShowDeleteModal(false);
-      navigate(-1);
+      // Queue success toast, navigate to dashboard and hard refresh
+      try {
+        localStorage.setItem('postReloadToast', JSON.stringify({ type: 'success', message: 'Company deleted successfully' }));
+      } catch {}
+      navigate('/dashboard', { replace: true });
+      try { window.location.reload(); } catch {}
       // Optionally navigate or show toast
     } catch (err) {
       // handle error
+      try {
+        const message = err?.response?.data?.message || 'Failed to delete company';
+        localStorage.setItem('postReloadToast', JSON.stringify({ type: 'error', message }));
+      } catch {}
     } finally {
       setCompanyLoading(false);
     }
@@ -366,7 +420,7 @@ const Settings = () => {
               <button
                 onClick={() => setIsEditing(!isEditing)}
                 className={`px-3 py-2 rounded-md font-medium transition ${
-                  isEditing ? 'bg-transparent text-pink2 border border-pink2' : 'bg-pink2 text-black'
+                  isEditing ? 'bg-white hover:bg-pink2 hover:text-white text-pink2 border border-pink2' : 'hover:bg-pink2 hover:text-white bg-white text-pink2'
                 }`}
               >
                 {isEditing ? 'Cancel' : 'Edit'}
@@ -390,7 +444,7 @@ const Settings = () => {
               {isEditing && (
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="px-3 py-1.5 bg-[#23272F] text-pink2 rounded-md flex items-center gap-2"
+                  className={`px-3 py-1.5 ${btnDefault} flex items-center gap-2`}
                 >
                   <FiCamera />
                   Upload
@@ -456,7 +510,7 @@ const Settings = () => {
                     onClick={handleSave}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    className="px-5 py-2 bg-pink2 text-black rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                    className={`px-5 py-2 rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed ${btnDefault} text-black`}
                     disabled={!isProfileChanged}
                   >
                     <FiSave className="inline mr-2" />
@@ -518,7 +572,7 @@ const Settings = () => {
             </div>
 
             <div className="flex justify-end">
-              <button onClick={handleChangePassword} className="px-4 py-2 bg-pink2 rounded-md font-medium text-black">
+              <button onClick={handleChangePassword} className={`${btnDefault} px-4 py-2 text-black`}>
                 <FiSave className="inline mr-2" />
                 Change Password
               </button>
@@ -539,45 +593,50 @@ const Settings = () => {
               </div>
             </div>
           </div>
-
-          <div className="mb-4">
-            <div className="text-sm text-gray2">Current Plan</div>
-            <div className="text-xl font-bold text-pink2">{currentPlan?.name || 'Unknown'}</div>
-          </div>
-
-          {plansLoading ? (
-            <div className="text-gray2">Loading plans...</div>
+          {selectedRoleType !== 'author' ? (
+            <div className="text-gray2">Only company authors can view and manage plans.</div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {plans.map(plan => (
-                <div key={plan.id} className={`p-4 rounded-lg border ${plan.name === currentPlan?.name ? 'border-pink2 bg-pink2/6' : 'border-black bg-black'}`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-lg font-semibold text-white">{plan.name}</div>
-                      <div className="text-sm text-gray2">{plan.description}</div>
+            <>
+              <div className="mb-4">
+                <div className="text-sm text-gray2">Current Plan</div>
+                <div className="text-xl font-bold text-pink2">{currentPlan?.name || 'Unknown'}</div>
+              </div>
+
+              {plansLoading ? (
+                <div className="text-gray2">Loading plans...</div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {plans.map(plan => (
+                    <div key={plan.id} className={`p-4 rounded-lg border ${plan.name === currentPlan?.name ? 'border-pink2 bg-pink2/6' : 'border-black bg-black'}`}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-lg font-semibold text-white">{plan.name}</div>
+                          <div className="text-sm text-gray2">{plan.description}</div>
+                        </div>
+                        <div className="text-xl font-extrabold text-pink2">{plan.price === 0 ? 'Free' : `$${plan.price}/mo`}</div>
+                      </div>
+
+                      <ul className="text-xs text-gray2 mt-3 list-disc pl-4 space-y-1">
+                        <li>Max Workspaces: {plan.maxWorkspaces}</li>
+                        <li>Max Sheets: {plan.maxSheets}</li>
+                        <li>Max Tasks: {plan.maxTasks}</li>
+                        <li>Max Members: {plan.maxMembers}</li>
+                      </ul>
+
+                      <div className="mt-4 flex justify-end">
+                        {plan.name === currentPlan?.name ? (
+                          <span className="px-3 py-1 bg-[#232323] rounded text-xs text-pink2">Current</span>
+                        ) : (
+                          <button onClick={() => navigate('/subscriptions')} className={`${btnDefault} px-3 py-1 text-sm`}>
+                            Upgrade
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <div className="text-xl font-extrabold text-pink2">{plan.price === 0 ? 'Free' : `$${plan.price}/mo`}</div>
-                  </div>
-
-                  <ul className="text-xs text-gray2 mt-3 list-disc pl-4 space-y-1">
-                    <li>Max Workspaces: {plan.maxWorkspaces}</li>
-                    <li>Max Sheets: {plan.maxSheets}</li>
-                    <li>Max Tasks: {plan.maxTasks}</li>
-                    <li>Max Members: {plan.maxMembers}</li>
-                  </ul>
-
-                  <div className="mt-4 flex justify-end">
-                    {plan.name === currentPlan?.name ? (
-                      <span className="px-3 py-1 bg-[#232323] rounded text-xs text-pink2">Current</span>
-                    ) : (
-                      <button onClick={() => navigate('/subscriptions')} className="px-3 py-1 bg-pink2 text-black rounded font-medium">
-                        Upgrade
-                      </button>
-                    )}
-                  </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -594,7 +653,7 @@ const Settings = () => {
               </div>
             </div>
             <div>
-              <button onClick={() => setCompanyEdit(!companyEdit)} className={`px-3 py-2 rounded-md transition ${companyEdit ? 'bg-transparent text-pink2 border border-pink2' : 'bg-pink2 text-black'}`}>
+              <button onClick={() => setCompanyEdit(!companyEdit)} className={`px-3 py-2 rounded-md transition ${companyEdit ? 'bg-white text-pink2 border border-pink2 hover:bg-pink2 hover:text-white' : 'bg-pink2 text-black'}`}>
                 {companyEdit ? 'Cancel' : 'Edit'}
               </button>
             </div>
@@ -603,7 +662,18 @@ const Settings = () => {
           {companyLoading ? (
             <div className="text-gray2">Loading company info...</div>
           ) : !companyData ? (
-            <div className="text-gray2">No company info found.</div>
+            // CHANGED: show create company CTA when no company found
+            <div className="space-y-3">
+              <div className="text-gray2">No company info found.</div>
+              <div className="flex justify-end">
+                <button
+                  onClick={() => setShowCreateModal(true)}
+                  className="px-4 py-2 rounded-lg bg-pink2 text-white hover:opacity-95"
+                >
+                  <FiEdit2 className="inline mr-2" /> Create Company
+                </button>
+              </div>
+            </div>
           ) : (
             <div className="space-y-4">
               <div>
@@ -614,20 +684,20 @@ const Settings = () => {
                   value={companyForm.name}
                   onChange={handleCompanyChange}
                   disabled={!companyEdit}
-                  className={`w-full bg-[#0B0C0F] border rounded-lg py-2 px-3 text-white ${!companyEdit ? 'opacity-70 cursor-not-allowed' : 'border-[#2E2E2E] focus:border-pink2'}`}
+                  className={`w-full bg-[#0C0C0F] border rounded-lg py-2 px-3 text-white ${!companyEdit ? 'opacity-70 cursor-not-allowed' : 'border-[#2E2E2E] focus:border-pink2'}`}
                 />
               </div>
 
               {companyEdit && (
                 <div className="flex justify-end gap-3">
-                  <motion.button onClick={handleCompanyUpdate} whileHover={{ scale: 1.02 }} className="px-4 py-2 bg-pink2 text-black rounded-md font-medium">
+                  <motion.button onClick={handleCompanyUpdate} whileHover={{ scale: 1.02 }} className={`${btnDefault} px-4 py-2 text-black`}>
                     <FiSave className="inline mr-2" /> Save
                   </motion.button>
                 </div>
               )}
 
               <div className="border-t border-[#232323] pt-4 flex justify-end">
-                <motion.button onClick={() => setShowDeleteModal(true)} whileHover={{ scale: 1.02 }} className="px-3 py-2 bg-red-600 text-white rounded-md">
+                <motion.button onClick={() => setShowDeleteModal(true)} whileHover={{ scale: 1.02 }} className={`${btnDefault} px-3 py-2`}>
                   <FiTrash2 className="inline mr-2" /> Delete Company
                 </motion.button>
               </div>
@@ -677,7 +747,7 @@ const Settings = () => {
                   <div className="flex items-center gap-2">
                     <div className="text-xs px-2 py-1 rounded bg-[#232323] text-[#C4E1FE]">{inv.status || '-'}</div>
                     {inv.status !== 'CANCELED' && (
-                      <button onClick={() => handleCancelInvitation(inv.id)} className="px-3 py-1 bg-red-600 text-white rounded-md text-sm">
+                      <button onClick={() => handleCancelInvitation(inv.id)} className={`${btnDefault} px-3 py-1 text-sm`}>
                         Cancel
                       </button>
                     )}
@@ -742,6 +812,8 @@ const Settings = () => {
       </div>
     ),
   };
+
+  // Shared button style: default white bg + pink text, hover -> pink bg + white text
 
   return (
     <div className="min-h-screen bg-[#0B0B0C] px-4 sm:px-6 lg:px-10 py-8">
@@ -835,6 +907,45 @@ const Settings = () => {
           title="Delete Company"
           message="Are you sure you want to delete this company? This action cannot be undone."
         />
+      )}
+
+      {/* NEW: Create Company Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setShowCreateModal(false)} />
+          <div className="relative bg-[#0F0F11] border border-[#2E2E2E] rounded-2xl p-6 w-full max-w-md mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">Create Company</h3>
+              <button onClick={() => setShowCreateModal(false)} className="text-gray2">
+                <FiX />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-[#C4E1FE] mb-1">Company Name</label>
+                <input
+                  type="text"
+                  value={createCompanyName}
+                  onChange={(e) => setCreateCompanyName(e.target.value)}
+                  className="w-full bg-[#0B0C0F] border border-[#2E2E2E] rounded-lg py-2 px-3 text-white focus:border-pink2 outline-none"
+                  placeholder="e.g. Acme Events"
+                />
+              </div>
+              <div className="flex justify-end gap-3">
+                <button onClick={() => setShowCreateModal(false)} className="px-4 py-2 rounded-lg bg-transparent text-white border border-[#2E2E2E] hover:bg-white/5">
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreateCompany}
+                  disabled={createLoading}
+                  className={`px-4 py-2 rounded-lg bg-pink2 text-white hover:opacity-95 ${createLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
+                >
+                  {createLoading ? 'Creating...' : 'Create'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
    );

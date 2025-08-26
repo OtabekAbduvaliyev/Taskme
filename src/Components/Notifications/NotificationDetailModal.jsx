@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useContext } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactDOM from "react-dom";
 import {
@@ -11,6 +11,8 @@ import {
 } from "react-icons/fi";
 import axiosInstance from "../../AxiosInctance/AxiosInctance";
 import { format } from "date-fns";
+import { useNavigate } from "react-router-dom";
+import { AuthContext } from "../../Auth/AuthContext";
 
 const getNotificationIcon = (type) => {
   switch (type) {
@@ -34,6 +36,8 @@ const NotificationDetailModal = ({ notificationId, isOpen, onClose }) => {
   const [actionLoading, setActionLoading] = useState(false);
   const [actionTaken, setActionTaken] = useState(false);
   const token = localStorage.getItem("token");
+  const navigate = useNavigate();
+  const { changeCompany, showToast } = useContext(AuthContext);
 
   useEffect(() => {
     if (!notificationId || !isOpen) return;
@@ -88,12 +92,84 @@ const NotificationDetailModal = ({ notificationId, isOpen, onClose }) => {
             }
           : prev
       );
+
       // Mark notification as read
       await axiosInstance.put(
         `/notification/${notification.id}/read`,
         null,
         { headers: { Authorization: `Bearer ${token}` } }
       );
+
+      // Notify other parts of the app that this notification was read
+      try {
+        window.dispatchEvent(
+          new CustomEvent("notification:read", { detail: { id: notification.id } })
+        );
+      } catch (e) {
+        /* ignore */
+      }
+
+      // Try to perform company switch if the invite is linked to a company
+      try {
+        const companyId = notification.member.companyId || notification.companyId;
+        if (companyId) {
+          // fetch updated user info and find the role for this company
+          const userRes = await axiosInstance.get("/user/info", {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const user = userRes?.data || {};
+          const role = Array.isArray(user.roles)
+            ? user.roles.find(
+                (r) =>
+                  r.company?.id === companyId ||
+                  r.company?._id === companyId ||
+                  String(r.company?.id) === String(companyId)
+              )
+            : null;
+
+          if (role) {
+            const changeResult = await changeCompany(
+              { roleId: role.id || role._id },
+              { deferToast: true }
+            );
+
+            // Fetch workspaces and navigate similarly to navbar switching UX
+            try {
+              const wsRes = await axiosInstance.get("/workspace", {
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              const wsList = Array.isArray(wsRes.data)
+                ? wsRes.data
+                : wsRes.data?.workspaces || [];
+              const firstWs = wsList && wsList.length ? wsList[0] : null;
+              if (firstWs && (firstWs.id || firstWs._id)) {
+                navigate(`/dashboard/workspace/${firstWs.id || firstWs._id}`, {
+                  replace: true,
+                });
+              } else {
+                navigate("/dashboard", { replace: true });
+              }
+            } catch (e) {
+              // navigation fallback
+              navigate("/dashboard", { replace: true });
+            }
+
+            // Show toast based on changeCompany result
+            if (changeResult && changeResult.success) {
+              try {
+                showToast("success", changeResult.message || "Switched to new company");
+              } catch {}
+            } else {
+              try {
+                showToast("error", changeResult?.message || "Failed to switch company");
+              } catch {}
+            }
+          }
+        }
+      } catch (err) {
+        // swallow company-switch errors but keep UI responsive
+      }
+
       // Close the modal so dropdowns/modal close after action
       if (typeof onClose === "function") onClose();
     } catch (error) {
@@ -102,6 +178,9 @@ const NotificationDetailModal = ({ notificationId, isOpen, onClose }) => {
       setActionLoading(false);
     }
   };
+
+  // also when user closes modal after viewing, mark as read and dispatch (handled elsewhere in UI flows),
+  // but keep this module focused on invite flow above.
 
   if (!isOpen) return null;
 

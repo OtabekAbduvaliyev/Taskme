@@ -23,6 +23,21 @@ const AuthProvider = ({ children }) => {
     setTimeout(() => setToast(t => ({ ...t, isOpen: false })), 3000); // auto-close after 3s
   };
 
+  // Show any queued toast from a previous page reload/navigation
+  React.useEffect(() => {
+    try {
+      const raw = localStorage.getItem("postReloadToast");
+      if (raw) {
+        const payload = JSON.parse(raw);
+        if (payload && payload.type && payload.message) {
+          // Allow the app to mount, then show toast
+          setTimeout(() => showToast(payload.type, payload.message), 200);
+        }
+      }
+      localStorage.removeItem("postReloadToast");
+    } catch {}
+  }, []);
+
   const register = async (credentials) => {
     console.log(credentials);
     setLoading(true);
@@ -425,18 +440,14 @@ const fetchMembers = async () => {
     }
   };
 
-  // NEW: on mount, ensure authenticated users have company and plan.
-  // If token missing -> do nothing here (other routes handle login).
-  // If token exists but no company -> navigate to /createcompany.
-  // If company exists but no plan -> navigate to /subscriptions.
-  // Avoid redirect loops by allowing certain paths.
+  // Guard: if a company exists but plan doesn't, redirect to /subscriptions.
+  // If no company exists, do nothing (stay where user is).
   React.useEffect(() => {
     const guard = async () => {
       const token = localStorage.getItem("token");
       if (!token) return;
-      const allowedPaths = ["/createcompany", "/subscriptions", "/login", "/verification", "/reset-password", "/register", "/terms"];
-      // if user already on an allowed path do not force navigation
-      if (allowedPaths.includes(location.pathname)) return;
+      // avoid loops: if already on subscriptions, don't navigate
+      if (location.pathname === "/subscriptions") return;
 
       try {
         // fetch minimal user info
@@ -445,12 +456,14 @@ const fetchMembers = async () => {
         });
         const user = userRes?.data || {};
         const hasCompany = Array.isArray(user.roles) && user.roles.some(r => r?.company?.id || r?.company?._id);
+        const selectedRole = Array.isArray(user.roles) ? user.roles.find(r => r?.id === user?.selectedRole) : null;
+        const isAuthor = String(selectedRole?.type || '').toUpperCase() === 'AUTHOR';
 
-        if (!hasCompany) {
-          // No company -> go to create company page
-          navigate("/createcompany", { replace: true });
-          return;
-        }
+        // If no company -> do nothing
+        if (!hasCompany) return;
+
+        // Only authors should be redirected to pick a plan
+        if (!isAuthor) return;
 
         // Company exists: check current plan
         try {
@@ -464,21 +477,19 @@ const fetchMembers = async () => {
             return;
           }
         } catch (planErr) {
-          // If the endpoint fails (401/404/etc), send user to subscriptions so they can pick a plan
+          // If plan check fails, send user to subscriptions to pick a plan
           navigate("/subscriptions", { replace: true });
           return;
         }
       } catch (err) {
-        // If fetching user fails (token invalid/expired), remove token and go to login
+        // If fetching user fails (token invalid/expired), clear token and go to login
         try { localStorage.removeItem("token"); } catch {}
         navigate("/login", { replace: true });
       }
     };
 
-    // run guard once on mount
     guard();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [location.pathname, navigate]);
 
   return (
     <AuthContext.Provider

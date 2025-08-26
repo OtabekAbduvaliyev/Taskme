@@ -38,7 +38,7 @@ const Workspaces = ({user}) => {
   const [limitErrorOpen, setLimitErrorOpen] = useState(false);
   const limitTimeoutRef = useRef(null);
 
-  // Fetch current plan
+  // Fetch current plan (only when a role/company exists)
   const {
     data: currentPlan,
     isLoading: planLoading,
@@ -51,6 +51,9 @@ const Workspaces = ({user}) => {
       });
       return response.data;
     },
+    enabled: !!token && !!selectedRole?.company?.id,
+    retry: false,
+    refetchOnWindowFocus: false,
     staleTime: 300000,
   });
 
@@ -69,6 +72,9 @@ const Workspaces = ({user}) => {
       });
       return response.data;
     },
+    enabled: !!token && !!selectedRole?.company?.id,
+    retry: false,
+    refetchOnWindowFocus: false,
     staleTime: 300000, // Cache for 5 minutes
   });
 

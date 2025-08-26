@@ -292,7 +292,7 @@ const InviteMemberModal = ({ isOpen, onClose }) => {
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
             transition={{ type: "spring", duration: 0.5 }}
-            className="relative bg-[#1E1E1E] rounded-2xl w-full max-w-md overflow-hidden max-h-[90vh] overflow-y-auto"
+            className="relative bg-[#1E1E1E] rounded-2xl w-full max-w-md overflow-hidden max-h-[90vh] overflow-y-auto custom-scrollbar"
           >
             <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-pink2/20 to-transparent pointer-events-none" />
 
@@ -357,7 +357,7 @@ const InviteMemberModal = ({ isOpen, onClose }) => {
                         className="mt-4 p-4 bg-[#2A2A2A] rounded-xl border-2 border-[#3A3A3A]"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-pink2/20 flex items-center justify-center overflow-hidden">
+                          <div className="w-10 h-10 rounded-full bg-pink2/20 flex items-center justify-center overflow-hidden ">
                             {userDetails?.avatar?.path ? (
                               <img
                                 src={`https://eventify.preview.uz/${userDetails?.avatar?.path}`}
