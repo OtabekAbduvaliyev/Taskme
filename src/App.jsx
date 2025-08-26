@@ -19,20 +19,7 @@ import TermsofPolicy from './Components/Auth/TermsofPolicy';
 import MembersPage from './Pages/Members';
 
 // New wrapper used in route elements to prevent authenticated users from visiting auth pages
-const RedirectIfAuth = ({ children, fallback = "/dashboard" }) => {
-	// NOTE: This component runs inside React Router route context (so useNavigate works)
-	const navigate = useNavigate();
-	useEffect(() => {
-		const token = localStorage.getItem('token');
-		if (token) {
-			// if token exists, redirect to dashboard (or home if you prefer)
-			navigate(fallback, { replace: true });
-		}
-		// only run once when mounted
-		// eslint-disable-next-line
-	}, []);
-	return children || null;
-};
+
 
 const App = () => {
   const router = createBrowserRouter([
@@ -42,20 +29,20 @@ const App = () => {
     },
     {
       path: "/register",
-      // prevent access to register page when token exists
-      element: <RedirectIfAuth><AuthProvider><Register /></AuthProvider></RedirectIfAuth>,
+      // RedirectIfAuth removed
+      element: <AuthProvider><Register /></AuthProvider>,
     },
     {
       path: "/login",
-      element: <RedirectIfAuth><AuthProvider><SignIn /></AuthProvider></RedirectIfAuth>,
+      element: <AuthProvider><SignIn /></AuthProvider>,
     },
     {
       path: "/verification",
-      element: <RedirectIfAuth><AuthProvider><Verification /></AuthProvider></RedirectIfAuth>,
+      element: <AuthProvider><Verification /></AuthProvider>,
     },
     {
       path: "/reset-password",
-      element: <RedirectIfAuth><AuthProvider><RestoreVerification /></AuthProvider></RedirectIfAuth>,
+      element: <AuthProvider><RestoreVerification /></AuthProvider>,
     },
     {
       path: "/createcompany",

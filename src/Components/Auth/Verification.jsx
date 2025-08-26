@@ -12,12 +12,12 @@ const Verification = () => {
   const inputRefs = useRef([]);
 
   // Redirect away if token already exists (user already authenticated)
-  useEffect(() => {
-    if (localStorage.getItem('token')) {
-      navigate('/dashboard', { replace: true });
-    }
-    // eslint-disable-next-line
-  }, []);
+  // useEffect(() => {
+  //   if (localStorage.getItem('token')) {
+  //     navigate('/dashboard', { replace: true });
+  //   }
+  //   // eslint-disable-next-line
+  // }, []);
 
   useEffect(() => {
     inputRefs.current[0]?.focus();
