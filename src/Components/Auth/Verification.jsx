@@ -1,23 +1,13 @@
 import React, { useContext, useState, useRef, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { AuthContext } from '../../Auth/AuthContext';
 
 const OTP_LENGTH = 6;
 
 const Verification = () => {
-  const token = localStorage.getItem('token');
-  const navigate = useNavigate();
+  const token = localStorage.getItem('auth_verification_token');
   const [otpArr, setOtpArr] = useState(Array(OTP_LENGTH).fill(""));
   const { verification, loading } = useContext(AuthContext);
   const inputRefs = useRef([]);
-
-  // Redirect away if token already exists (user already authenticated)
-  // useEffect(() => {
-  //   if (localStorage.getItem('token')) {
-  //     navigate('/dashboard', { replace: true });
-  //   }
-  //   // eslint-disable-next-line
-  // }, []);
 
   useEffect(() => {
     inputRefs.current[0]?.focus();

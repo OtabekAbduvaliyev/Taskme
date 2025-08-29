@@ -24,6 +24,7 @@ const CreateCompany = () => {
     e.preventDefault();
     createCompany(credentials);
     setCredentials({ name: "" });
+    
   };
 
   return (

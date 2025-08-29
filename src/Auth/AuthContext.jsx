@@ -47,7 +47,7 @@ const AuthProvider = ({ children }) => {
         credentials
       );
       console.log(response);
-      localStorage.setItem("token", response.data.token);
+      localStorage.setItem("auth_verification_token", response.data.token);
       setLoading(false);
       navigate("/verification");
     } catch (error) {
@@ -105,6 +105,13 @@ const AuthProvider = ({ children }) => {
       console.log(response);
       setLoading(false);
       showToast("success", "You created company successfully");
+      const responseInfo = await axiosInstance.get("/user/info", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      console.log(responseInfo);
+      localStorage.setItem("selectedRoleType", JSON.stringify(responseInfo.data.roles.find(r => r.id === responseInfo.data.selectedRole).type));
       navigate("/subscriptions");
     } catch (error) {
       console.log(error);
@@ -446,6 +453,7 @@ const fetchMembers = async () => {
     const guard = async () => {
       const token = localStorage.getItem("token");
       if (!token) return;
+      console.log({token});
       // avoid loops: if already on subscriptions, don't navigate
       if (location.pathname === "/subscriptions") return;
 
@@ -482,6 +490,7 @@ const fetchMembers = async () => {
           return;
         }
       } catch (err) {
+         console.log(err);
         // If fetching user fails (token invalid/expired), clear token and go to login
         try { localStorage.removeItem("token"); } catch {}
         navigate("/login", { replace: true });

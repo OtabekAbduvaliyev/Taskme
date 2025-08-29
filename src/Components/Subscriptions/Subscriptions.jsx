@@ -200,7 +200,6 @@ const Subscriptions = () => {
   })();
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedPlanId, setSelectedPlanId] = useState(null);
   const [message, setMessage] = useState("");
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [modalPlan, setModalPlan] = useState(null);
