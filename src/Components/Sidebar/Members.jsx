@@ -135,11 +135,14 @@ const Members = ({ role }) => {
                     />
                   </div>
                   <div className="memText">
-                    <p className="text-[13px] sm:text-[14px] md:text-[15px] text-white">
-                      {member.user.firstName
-                        ? member.user.firstName + " " + member.user.lastName
-                        : "Unknown User"}
-                    </p>
+<div className="max-w-[130px]">
+  <p className="truncate text-[13px] sm:text-[14px] md:text-[15px] text-white">
+    {member.user.firstName
+      ? member.user.firstName + " " + member.user.lastName
+      : "Unknown User"}
+  </p>
+</div>
+
                     <p
                       className="text-[10px] sm:text-[11px] md:text-[12px] text-gray2"
                       style={{

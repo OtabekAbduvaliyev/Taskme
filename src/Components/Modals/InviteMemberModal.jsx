@@ -4,9 +4,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import axiosInstance from "../../AxiosInctance/AxiosInctance";
 import ReactDOM from "react-dom";
 import { AuthContext } from "../../Auth/AuthContext";
-
-
 import useEscapeKey from "./hooks/useEscapeKey";
+
 const InviteMemberModal = ({ isOpen, onClose }) => {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);

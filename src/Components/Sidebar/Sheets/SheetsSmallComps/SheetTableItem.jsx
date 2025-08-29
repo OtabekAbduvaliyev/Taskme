@@ -19,6 +19,7 @@ import { FaRegFileAlt } from "react-icons/fa";
 import DeleteConfirmationModal from "../../../Modals/DeleteConfirmationModal";
 import dayjs from "dayjs";
 import { DatePicker as AntdDatePicker } from "antd";
+import useEscapeKey from "../../../Modals/hooks/useEscapeKey";
 const { RangePicker: AntdRangePicker } = AntdDatePicker;
 
 const SheetTableItem = ({
@@ -438,6 +439,10 @@ const SheetTableItem = ({
     setDeletingOptionId(null);
   };
 
+  // Use ESC key hook for modals
+  useEscapeKey(addOptionModal.open, closeAddOptionModal);
+  useEscapeKey(manageOptionsModal.open, closeManageOptionsModal);
+
   // Handle edit in manage modal
   const handleEditOptionChange = (id, field, value) => {
     setManageOptionsModal(prev => ({
@@ -768,7 +773,9 @@ const SheetTableItem = ({
             typeof window !== "undefined" &&
             document.getElementById("root") &&
             ReactDOM.createPortal(
-              <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black bg-opacity-40">
+              <div
+                onClick={closeAddOptionModal} // close when clicking backdrop
+                className="fixed inset-0 z-[10000] flex items-center justify-center bg-black bg-opacity-40">
                 <div className="bg-grayDash rounded-lg shadow-lg p-6 w-full max-w-[350px] relative">
                   <div className="flex justify-between items-center mb-4">
                     <div className="font-bold text-lg text-white">Add Option</div>

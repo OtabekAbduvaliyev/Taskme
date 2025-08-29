@@ -840,8 +840,8 @@ const Settings = () => {
                 <span className="text-lg font-bold text-white">{userData?.email?.[0]?.toUpperCase() || '?'}</span>
               )}
             </div>
-            <div className="flex-1">
-              <div className="text-white font-semibold">{userData?.firstName ? `${userData.firstName} ${userData.lastName || ''}` : userData?.email}</div>
+            <div className="flex-1 max-w-[130px]">
+              <div className="text-white font-semibold truncate">{userData?.firstName ? `${userData.firstName} ${userData.lastName || ''}` : userData?.email}</div>
               <div className="text-xs text-[#C4E1FE] truncate">{userData?.email}</div>
             </div>
           </div>
