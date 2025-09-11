@@ -774,7 +774,7 @@ const SheetTableItem = ({
             document.getElementById("root") &&
             ReactDOM.createPortal(
               <div
-                onClick={closeAddOptionModal} // close when clicking backdrop
+                // onClick={closeAddOptionModal} // close when clicking backdrop
                 className="fixed inset-0 z-[10000] flex items-center justify-center bg-black bg-opacity-40">
                 <div className="bg-grayDash rounded-lg shadow-lg p-6 w-full max-w-[350px] relative">
                   <div className="flex justify-between items-center mb-4">

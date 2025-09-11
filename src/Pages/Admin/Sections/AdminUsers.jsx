@@ -65,6 +65,7 @@ const AdminUsers = () => {
         limit,
         sortBy: sortBy || undefined,
         sortOrder,
+        sort: JSON.stringify(sortFields), // Add this line
         status: status || undefined,
         isActive: isActive !== '' ? isActive : undefined,
         isAdmin: isAdmin !== '' ? isAdmin : undefined,

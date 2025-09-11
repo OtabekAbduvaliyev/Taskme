@@ -10,7 +10,7 @@ import {
 } from "antd";
 import React, { useCallback, useContext, useEffect, useState, useRef } from "react";
 import { BsTable, BsThreeDotsVertical } from "react-icons/bs";
-import { IoAddCircleOutline, IoSearch } from "react-icons/io5";
+import { IoAddCircleOutline, IoFilterCircleOutline, IoSearch } from "react-icons/io5";
 import { Link, useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { AuthContext } from "../../../Auth/AuthContext";
 import { useQuery } from "@tanstack/react-query";
@@ -29,6 +29,8 @@ import Selecter from "../../Pagination and selecter/Selecter";
 import MoveTaskModal from "../../../Components/Modals/MoveTaskModal";
 import Toast from "../../../Components/Modals/Toast";
 import UpgradePlanModal from "../../Modals/UpgradePlanModal";
+import SortPanel from '../../../Components/SortPanel/SortPanel';
+import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 
 const Sheets = () => {
   const { id } = useParams(); // workspace ID
@@ -41,9 +43,11 @@ const Sheets = () => {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [sheetToDelete, setSheetToDelete] = useState(null);
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
+  const [sortFields, setSortFields] = useState({});
+  const [sortPanelOpen, setSortPanelOpen] = useState(false);
   const token = localStorage.getItem("token");
   const navigate = useNavigate();
-  const { createTask } = useContext(AuthContext);
+  const { createTask, dndOrdersSheets } = useContext(AuthContext);
   // Fetch live user info to determine role and permissions dynamically
   const {
     data: userInfoRes,
@@ -78,7 +82,8 @@ const Sheets = () => {
   const [selectedTasks, setSelectedTasks] = useState([]);
   const [itemsPerPage, setItemsPerPage] = useState(initialLimit);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
-
+  //Sort panel state
+  const [sortPanel, setSortPanel] = useState(false);
   // Filters panel state (moved to parent so button sits in the actions bar)
   const [filtersOpen, setFiltersOpen] = useState(false);
   const toggleFiltersPanel = () => setFiltersOpen((p) => !p);
@@ -203,36 +208,42 @@ const Sheets = () => {
       disabled: false,
     },
   ];
-const credentails = {
-  key: "name",
-  value: searchQuery
-};
+  const credentails = {
+    key: "name",
+    value: searchQuery
+  };
 
-const {
-  isLoading: taskLoading,
-  error: errorTask,
-  data: taskResponse,
-  refetch: taskRefetch,
-} = useQuery({
-  queryKey: ["tasks", sheetId, searchQuery, currentPage, itemsPerPage],
-  queryFn: async () => {
-    const url = `task/${sheetId}`;
-    const res = await axiosInstance.get(url, {
-      params: {
-        search: searchQuery,
-        page: currentPage,
-        limit: itemsPerPage,
-      },
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-    return res.data; // expected shape: { tasks: [...], pagination: { page, pages, limit, count } }
-  },
-  enabled: !!sheetId,
-});
+  const {
+    isLoading: taskLoading,
+    error: errorTask,
+    data: taskResponse,
+    refetch: taskRefetch,
+  } = useQuery({
+    queryKey: ["tasks", sheetId, searchQuery, currentPage, itemsPerPage, sortFields],
+    queryFn: async () => {
+      const url = `task/${sheetId}`;
+      const params = new URLSearchParams();
+      
+      // Add all query parameters
+      if (searchQuery) params.set('search', searchQuery);
+      params.set('page', String(currentPage));
+      params.set('limit', String(itemsPerPage));
+      if (Object.keys(sortFields).length) {
+        params.set('filters', JSON.stringify(sortFields));
+      }
 
-// console.log(taskResponse);
+      const res = await axiosInstance.get(url, {
+        params,
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      return res.data; // expected shape: { tasks: [...], pagination: { page, pages, limit, count } }
+    },
+    enabled: !!sheetId,
+  });
+
+  // console.log(taskResponse);
 
   const [isCreatingTask, setIsCreatingTask] = useState(false);
 
@@ -284,16 +295,17 @@ const {
     }
   }, [taskResponse, itemsPerPage]);
 
-  // Sync state -> URL so page/limit/view/search are shareable
+  // Sync state -> URL so page/limit/view/search/sort are shareable
   useEffect(() => {
     const params = {};
     if (searchQuery) params.search = searchQuery;
     if (currentPage && currentPage > 1) params.page = String(currentPage);
     if (itemsPerPage && itemsPerPage !== 10) params.limit = String(itemsPerPage);
     if (view && view !== "table") params.view = view;
+    if (Object.keys(sortFields).length) params.sort = JSON.stringify(sortFields);
     // replace to avoid pushing many entries into history during quick interactions
     setSearchParams(params, { replace: true });
-  }, [currentPage, itemsPerPage, view, searchQuery, setSearchParams]);
+  }, [currentPage, itemsPerPage, view, searchQuery, sortFields, setSearchParams]);
 
   const handleSearch = (e) => {
     const value = e.target.value;
@@ -356,7 +368,7 @@ const {
       setSelectedTasks([]);
       setIsDeleteTaskModalOpen(false);
       setCurrentPage(1);
-      try { await taskRefetch(); } catch(_) { }
+      try { await taskRefetch(); } catch (_) { }
     } catch (err) {
       // optionally show an error toast or log
       console.error("Bulk delete tasks error:", err);
@@ -422,6 +434,41 @@ const {
     }
   };
 
+  const handleSort = (newSortFields) => {
+    setSortFields(newSortFields);
+    setSortPanelOpen(false);
+    setCurrentPage(1); // Reset to first page when sort changes
+  };
+
+  // New: compute stable sorted tabs order (server order ascending)
+  const sortedSheetsTabs = sheets?.sheets ? [...sheets.sheets].sort((a, b) => (a.order || 0) - (b.order || 0)) : [];
+
+  // Handle DnD end for sheet tabs
+  const handleOnDragEnd = React.useCallback(
+    async (result) => {
+      if (!result.destination || !sheets?.sheets) return;
+      try {
+        // Work with server order ascending
+        const current = [...sortedSheetsTabs];
+        const reordered = Array.from(current);
+        const [moved] = reordered.splice(result.source.index, 1);
+        reordered.splice(result.destination.index, 0, moved);
+
+        const sheetIds = reordered.map((s) => s.id);
+        const orders = reordered.map((_, idx) => idx + 1);
+        const payload = { sheetIds, orders };
+
+        // Use context helper to persist and then refetch
+        await dndOrdersSheets(payload);
+        try { await refetch(); } catch (_) {}
+      } catch (err) {
+        console.error("Error reordering sheets:", err);
+        try { await refetch(); } catch (_) {}
+      }
+    },
+    [sortedSheetsTabs, dndOrdersSheets, sheets, refetch]
+  );
+
   return (
     <>
       {/* Toast Notification */}
@@ -467,71 +514,86 @@ const {
             className="flex flex-col h-full"
           >
             {/* 1. Sheet Tabs - sticky top */}
-            <div className="sheets mt-[20px] sm:mt-[24px] md:mt-[27px] text-white gap-[8px] sm:gap-[10px] flex sticky top-0 pb-2 overflow-x-auto custom-scrollbar">
-              <CreateSheetFormModal
-                handleToggleModal={handleToggleModal}
-                isOpen={isOpen}
-                refetch={refetch}
-                isEditing={isEditing}
-                editingSheetId={editingSheetId}
-                editingSheetOrder={editingSheetOrder}
-                editingSheetName={editingSheetName}
-                onSheetCreated={handleSheetCreated}
-              />
-              {/*
-                Render sheets in reverse so newest appears first in the tab list.
-                Use slice() to avoid mutating the original array.
-              */}
-              {sheets?.sheets.slice().reverse().map((sheet) => {
-                const qs = searchParams.toString();
-                return (
-                  <Link
-                    key={sheet.id}
-                    to={`/dashboard/workspace/${id}/${sheet.id}${qs ? `?${qs}` : ""}`}
-                    className="sheet flex items-center gap-[6px] hover:bg-gray transition-all duration-1000 bg-grayDash rounded-[9px] pl-[10px] sm:pl-[12px] pr-[6px] py-[6px] inline-flex cursor-pointer text-[13px] sm:text-[14px]"
+            <DragDropContext onDragEnd={handleOnDragEnd}>
+              <Droppable droppableId="sheetsTabs" direction="horizontal">
+                {(provided) => (
+                  <div
+                    className="sheets mt-[20px] sm:mt-[24px] md:mt-[27px] text-white gap-[8px] sm:gap-[10px] flex sticky top-0 pb-2 overflow-x-auto custom-scrollbar"
+                    ref={provided.innerRef}
+                    {...provided.droppableProps}
                   >
-                    {/* show Untitled when name is falsy */}
-                    <p>{sheet.name ? sheet.name : "Untitled"}</p>
-                    <Dropdown
-                      trigger={["click"]}
-                      menu={{ items: items(sheet.id, sheet.order, sheet.name) }}
-                    >
-                      <a onClick={(e) => e.preventDefault()}>
-                        <Space>
-                          <BsThreeDotsVertical
-                            className={`cursor-pointer text-[10px] ${sheetId == sheet.id ? "block" : "hidden"
-                              }`}
-                          />
-                        </Space>
-                      </a>
-                    </Dropdown>
-                  </Link>
-                );
-              })}
-              {canCreate && (
-                <div
-                  className="sheet flex items-center gap-[6px] bg-grayDash rounded-[9px] hover:bg-gray transition-all duration-1000 px-[6px] py-[7px] cursor-pointer"
-                  onClick={() => {
-                    if (sheetLimitReached) {
-                      setUpgradeModalOpen(true);
-                    } else {
-                      handleToggleModal();
-                    }
-                  }}
-                >
-                  <IoAddCircleOutline className="text-[18px] sm:text-[20px]" />
-                </div>
-              )}
-            </div>
+                    <CreateSheetFormModal
+                      handleToggleModal={handleToggleModal}
+                      isOpen={isOpen}
+                      refetch={refetch}
+                      isEditing={isEditing}
+                      editingSheetId={editingSheetId}
+                      editingSheetOrder={editingSheetOrder}
+                      editingSheetName={editingSheetName}
+                      onSheetCreated={handleSheetCreated}
+                    />
 
-            {/* Show limit hint when reached */}
-            {sheetLimitReached && canCreate && (
-              <div className="mt-2">
-                <p className="text-red-400 text-xs">
-                  Sheet limit reached for your plan ({displayMaxSheets}). Upgrade to add more.
-                </p>
-              </div>
-            )}
+                    {/* Render sheets in server order (ascending) so DnD indices match server payload */}
+                    {sortedSheetsTabs.map((sheet, index) => {
+                      const qs = searchParams.toString();
+                      return (
+                        <Draggable key={sheet.id} draggableId={String(sheet.id)} index={index}>
+                          {(prov) => (
+                            <Link
+                              ref={prov.innerRef}
+                              {...prov.draggableProps}
+                              {...prov.dragHandleProps}
+                              key={sheet.id}
+                              to={`/dashboard/workspace/${id}/${sheet.id}${qs ? `?${qs}` : ""}`}
+                              className={`sheet flex items-center gap-[6px] hover:bg-gray transition-all duration-1000 bg-grayDash rounded-[9px] pl-[10px] sm:pl-[12px] pr-[6px] py-[6px] inline-flex cursor-pointer text-[13px] sm:text-[14px] ${sheetId == sheet.id ? "bg-pink2 text-white" : "bg-grayDash"}`}
+                            >
+                              <p>{sheet.name ? sheet.name : "Untitled"}</p>
+                              <Dropdown
+                                trigger={["click"]}
+                                menu={{ items: items(sheet.id, sheet.order, sheet.name) }}
+                              >
+                                <a onClick={(e) => e.preventDefault()}>
+                                  <Space>
+                                    <BsThreeDotsVertical
+                                      className={`cursor-pointer text-[10px] ${sheetId == sheet.id ? "block" : "hidden"}`}
+                                    />
+                                  </Space>
+                                </a>
+                              </Dropdown>
+                            </Link>
+                          )}
+                        </Draggable>
+                      );
+                    })}
+
+                    {canCreate && (
+                      <div
+                        className="sheet flex items-center gap-[6px] bg-grayDash rounded-[9px] hover:bg-gray transition-all duration-1000 px-[6px] py-[7px] cursor-pointer"
+                        onClick={() => {
+                          if (sheetLimitReached) {
+                            setUpgradeModalOpen(true);
+                          } else {
+                            handleToggleModal();
+                          }
+                        }}
+                      >
+                        <IoAddCircleOutline className="text-[18px] sm:text-[20px]" />
+                      </div>
+                    )}
+
+                    {provided.placeholder}
+                  </div>
+                )}
+              </Droppable>
+            </DragDropContext>
+             {/* Show limit hint when reached */}
+             {sheetLimitReached && canCreate && (
+               <div className="mt-2">
+                 <p className="text-red-400 text-xs">
+                   Sheet limit reached for your plan ({displayMaxSheets}). Upgrade to add more.
+                 </p>
+               </div>
+             )}
 
             {/* 2. Sheet Actions - sticky below tabs */}
             {sheetId && (
@@ -577,6 +639,14 @@ const {
                     <CiFilter className="text-[16px]" />
                     <p className="text-[13px] sm:text-[14px]">Filters</p>
                   </div>
+                  <div
+                    ref={filtersButtonRef}
+                    className="text-white flex items-center gap-[6px] hover:cursor-pointer px-3 py-2 rounded bg-grayDash hover:bg-pink2 duration-200"
+                    onClick={() => setSortPanelOpen(true)}
+                  >
+                    <IoFilterCircleOutline className="text-[16px]" />
+                    <p className="text-[13px] sm:text-[14px]">Sort</p>
+                  </div>
                 </div>
                 <div className="items-center flex gap-[12px] sm:gap-[16px] w-full sm:w-auto justify-end">
                   <div
@@ -605,6 +675,11 @@ const {
                   </div>
                 </div>
               </motion.div>
+            )}
+            {/* Sort Panel - can be a modal or a side panel; for simplicity, use a basic implementation */}
+            {sortPanel && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+              </div>
             )}
             {/* 3. Task View - scrollable middle */}
             <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 mt-[10px] mb-[110px] md:mb-[100px]  rounded-[12px]">
@@ -650,7 +725,7 @@ const {
                       <div className="text-gray2 mb-6">
                         No sheets found. Create your first sheet to get started!
                       </div>
-                      
+
                       {/* Add Sheet Button - similar to addWorkspaceButton */}
                       <div className="addSheetButton max-w-md mx-auto">
                         {canCreate ? (
@@ -749,8 +824,8 @@ const {
                           }
                         }}
                         canEdit={canEdit} // NEW: tells table/items whether editing is permitted
-                       />
-                     )}
+                      />
+                    )}
                     {view === "list" && (
                       <div className="mt-[26px] flex items-center justify-center">
                         <div className="bg-grayDash rounded-[12px] p-8 flex flex-col items-center gap-3 text-center max-w-md">
@@ -824,6 +899,13 @@ const {
                 }}
               />
             )}
+            <SortPanel
+              isOpen={sortPanelOpen}
+              onClose={() => setSortPanelOpen(false)}
+              onSort={handleSort}
+              columns={sheets?.columns || []}
+              currentSort={sortFields}
+            />
           </motion.div>
         </AnimatePresence>
       </div>
