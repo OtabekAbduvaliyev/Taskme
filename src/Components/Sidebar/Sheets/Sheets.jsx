@@ -48,6 +48,7 @@ const Sheets = () => {
   const token = localStorage.getItem("token");
   const navigate = useNavigate();
   const { createTask, dndOrdersSheets } = useContext(AuthContext);
+
   // Fetch live user info to determine role and permissions dynamically
   const {
     data: userInfoRes,
@@ -117,7 +118,12 @@ const Sheets = () => {
     staleTime: 300000,
     enabled: !!id && canRead,
   });
-
+  // Local optimistic sheets ordering for smooth DnD UI
+  const [localSheets, setLocalSheets] = useState([]);
+  // Keep localSheets in sync when server data arrives or changes
+  useEffect(() => {
+    setLocalSheets(sheets?.sheets ? [...sheets.sheets] : []);
+  }, [sheets]);
   useEffect(() => {
     if (sheets?.sheets.length && !sheetId) {
       // Navigate to the newest sheet (assumes backend appends new sheets to the end)
@@ -441,31 +447,45 @@ const Sheets = () => {
   };
 
   // New: compute stable sorted tabs order (server order ascending)
-  const sortedSheetsTabs = sheets?.sheets ? [...sheets.sheets].sort((a, b) => (a.order || 0) - (b.order || 0)) : [];
+  // Use localSheets (optimistic) if present, otherwise fall back to server sheets.
+  const sortedSheetsTabs = (localSheets && localSheets.length)
+    ? [...localSheets].sort((a, b) => (a.order || 0) - (b.order || 0))
+    : (sheets?.sheets ? [...sheets.sheets].sort((a, b) => (a.order || 0) - (b.order || 0)) : []);
 
   // Handle DnD end for sheet tabs
   const handleOnDragEnd = React.useCallback(
     async (result) => {
       if (!result.destination || !sheets?.sheets) return;
       try {
-        // Work with server order ascending
+        // create local optimistic reorder so UI is instant (works like tasks/columns)
         const current = [...sortedSheetsTabs];
         const reordered = Array.from(current);
         const [moved] = reordered.splice(result.source.index, 1);
         reordered.splice(result.destination.index, 0, moved);
 
-        const sheetIds = reordered.map((s) => s.id);
-        const orders = reordered.map((_, idx) => idx + 1);
+        // Update local UI immediately (also update their order field for consistency)
+        const optimistic = reordered.map((s, idx) => ({ ...s, order: idx + 1 }));
+        setLocalSheets(optimistic);
+
+        const sheetIds = optimistic.map((s) => s.id);
+        const orders = optimistic.map((s) => s.order);
         const payload = { sheetIds, orders };
 
-        // Use context helper to persist and then refetch
-        await dndOrdersSheets(payload);
-        try { await refetch(); } catch (_) {}
-      } catch (err) {
-        console.error("Error reordering sheets:", err);
-        try { await refetch(); } catch (_) {}
-      }
-    },
+        // Persist in background. If server fails, revert by refetching.
+        try {
+          await dndOrdersSheets(payload);
+          // optional: re-sync with server to ensure authoritative order
+          try { await refetch(); } catch (_) {}
+        } catch (persistErr) {
+          console.error("Error persisting sheet order, reverting UI:", persistErr);
+          // revert to server data
+          try { await refetch(); } catch (_) {}
+        }
+       } catch (err) {
+         console.error("Error reordering sheets:", err);
+         try { await refetch(); } catch (_) {}
+       }
+     },
     [sortedSheetsTabs, dndOrdersSheets, sheets, refetch]
   );
 
@@ -545,7 +565,7 @@ const Sheets = () => {
                               {...prov.dragHandleProps}
                               key={sheet.id}
                               to={`/dashboard/workspace/${id}/${sheet.id}${qs ? `?${qs}` : ""}`}
-                              className={`sheet flex items-center gap-[6px] hover:bg-gray transition-all duration-1000 bg-grayDash rounded-[9px] pl-[10px] sm:pl-[12px] pr-[6px] py-[6px] inline-flex cursor-pointer text-[13px] sm:text-[14px] ${sheetId == sheet.id ? "bg-pink2 text-white" : "bg-grayDash"}`}
+                              className={`sheet flex items-center gap-[6px] hover:bg-gray transition-colors duration-150 ease-in-out bg-grayDash rounded-[9px] pl-[10px] sm:pl-[12px] pr-[6px] py-[6px] inline-flex cursor-pointer text-[13px] sm:text-[14px] ${sheetId == sheet.id ? "bg-pink2 text-white" : "bg-grayDash"}`}
                             >
                               <p>{sheet.name ? sheet.name : "Untitled"}</p>
                               <Dropdown
