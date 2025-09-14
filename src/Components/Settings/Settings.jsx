@@ -377,6 +377,12 @@ const Settings = () => {
   const [billingUsage, setBillingUsage] = useState(null); // new
   const [billingLoading, setBillingLoading] = useState(false); // new
 
+  // Transactions state + view selector inside Billing
+  const [billingView, setBillingView] = useState('usage'); // 'usage' | 'transactions'
+  const [transactions, setTransactions] = useState([]);
+  const [transactionsLoading, setTransactionsLoading] = useState(false);
+  const [transactionsError, setTransactionsError] = useState(null);
+
   useEffect(() => {
     if (activeTab !== "billing") return;
     setBillingLoading(true);
@@ -387,6 +393,27 @@ const Settings = () => {
       .catch(() => setBillingUsage(null))
       .finally(() => setBillingLoading(false));
   }, [activeTab, token]);
+
+  // Fetch transactions when Billing tab + transactions view is active
+  useEffect(() => {
+    if (activeTab !== "billing" || billingView !== "transactions") return;
+    setTransactionsLoading(true);
+    setTransactionsError(null);
+    axiosInstance.get("/transaction", {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(res => {
+        // support both { transactions: [...] } and array responses
+        const payload = res?.data;
+        const arr = Array.isArray(payload) ? payload : (Array.isArray(payload?.transactions) ? payload.transactions : []);
+        setTransactions(arr);
+      })
+      .catch(err => {
+        setTransactions([]);
+        setTransactionsError(err);
+      })
+      .finally(() => setTransactionsLoading(false));
+  }, [activeTab, billingView, token]);
 
   // prepare usage items outside JSX to avoid rendering raw array literal
   const usageItems = React.useMemo(() => {
@@ -762,51 +789,93 @@ const Settings = () => {
     billing: (
       <div className="space-y-6 py-3">
         <div className="bg-[#141416] border border-[#2E2E2E] rounded-2xl p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-[#1B1B1B] flex items-center justify-center text-pink2">
-                <FiCreditCard />
-              </div>
-              <div>
-                <div className="text-lg font-semibold text-white">Billing & Usage</div>
-                <div className="text-sm text-gray2">View your plan and usage limits</div>
-              </div>
-            </div>
+          {/* view selector: Usage / Transactions */}
+          <div className="mb-4 flex gap-2">
+            <button
+              onClick={() => setBillingView('usage')}
+              className={`px-3 py-1 rounded-md text-sm ${billingView === 'usage' ? 'bg-pink2 text-white' : 'bg-transparent text-gray2 border border-[#232323]'}`}
+            >
+              Usage
+            </button>
+            <button
+              onClick={() => setBillingView('transactions')}
+              className={`px-3 py-1 rounded-md text-sm ${billingView === 'transactions' ? 'bg-pink2 text-white' : 'bg-transparent text-gray2 border border-[#232323]'}`}
+            >
+              Transactions
+            </button>
           </div>
-          {billingLoading ? (
-            <div className="text-gray2">Loading billing info…</div>
-          ) : !billingUsage ? (
-            <div className="text-gray2">No billing info found.</div>
-          ) : (
-            <div className="space-y-6">
-              <div>
-                <div className="text-sm text-gray2">Current Plan</div>
-                <div className="text-xl font-bold text-pink2">{billingUsage.plan?.name || '-'}</div>
-                <div className="text-sm text-gray2">{billingUsage.plan?.description}</div>
-                <div className="text-lg font-bold text-white mt-2">
-                  {billingUsage.plan?.price === 0 ? 'Free' : `$${billingUsage.plan?.price}/mo`}
-                </div>
-              </div>
-              <div>
-                <div className="text-sm text-[#C4E1FE] mb-2">Usage</div>
+
+          {/* Billing: Transactions view */}
+          {billingView === 'transactions' ? (
+            <>
+              {transactionsLoading ? (
+                <div className="text-gray2">Loading transactions…</div>
+              ) : transactionsError ? (
+                <div className="text-red-400">Failed to load transactions</div>
+              ) : transactions.length === 0 ? (
+                <div className="text-gray2">No transactions found.</div>
+              ) : (
                 <div className="space-y-3">
-                  {usageItems.map(row => (
-                    <div key={row.label}>
-                      <div className="flex justify-between text-xs mb-1">
-                        <span className="text-white">{row.label}</span>
-                        <span className="text-gray2">{row.value} / {row.max}</span>
+                  {transactions.map(tx => (
+                    <div key={tx.id} className="bg-[#0B0F10] p-3 rounded-md border border-[#232323] flex items-center justify-between">
+                      <div>
+                        <div className="text-sm text-white font-medium">{tx.plan?.name || '—'}</div>
+                        <div className="text-xs text-gray2">{tx.id}</div>
+                        <div className="text-xs text-gray2">{tx.createdAt ? dayjs(tx.createdAt).format('MMM D, YYYY HH:mm') : ''}</div>
                       </div>
-                      <div className="w-full h-2 bg-[#232323] rounded">
-                        <div
-                          className="h-2 rounded bg-pink2 transition-all"
-                          style={{ width: `${Math.min(Number(row.percent) || 0, 100)}%` }}
-                        />
+                      <div className="text-right">
+                        <div className="text-sm font-semibold text-white">
+                          {typeof tx.amount === 'number' ? `$${(tx.amount / 100).toFixed(2)}` : '-'} {tx.currency?.toUpperCase() || ''}
+                        </div>
+                        <div className={`text-xs mt-1 ${tx.status === 'SUCCEEDED' ? 'text-green-400' : 'text-yellow-400'}`}>{tx.status}</div>
+                        <div className="text-xs text-gray2 mt-1">{tx.plan?.price ? `${tx.plan.price === 0 ? 'Free' : `$${tx.plan.price}/mo`}` : ''}</div>
                       </div>
                     </div>
                   ))}
                 </div>
-              </div>
-            </div>
+              )}
+            </>
+          ) : (
+            // Existing Usage UI (unchanged)
+            <>
+              {billingLoading ? (
+                <div className="text-gray2">Loading billing info…</div>
+              ) : !billingUsage ? (
+                <div className="text-gray2">No billing info found.</div>
+              ) : (
+                <div className="space-y-6">
+                  <div>
+                    <div className="text-sm text-gray2">Current Plan</div>
+                    <div className="text-xl font-bold text-pink2">{billingUsage.plan?.name || '-'}</div>
+                    <div className="text-sm text-gray2">{billingUsage.plan?.description}</div>
+                    <div className="text-lg font-bold text-white mt-2">
+                      {billingUsage.plan?.price === 0 ? 'Free' : `$${billingUsage.plan?.price}/mo`}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-[#C4E1FE] mb-2">Usage</div>
+                    <div className="space-y-3">
+                      {usageItems.map(row => (
+                        <div key={row.label}>
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="text-white">{row.label}</span>
+                            <span className="text-gray2">
+                              {row.value} / {row.max === -1 ? <span title="Unlimited" aria-label="Unlimited">∞</span> : row.max}
+                            </span>
+                          </div>
+                          <div className="w-full h-2 bg-[#232323] rounded">
+                            <div
+                              className="h-2 rounded bg-pink2 transition-all"
+                              style={{ width: `${Math.min(Number(row.percent) || 0, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -927,7 +996,7 @@ const Settings = () => {
                   type="text"
                   value={createCompanyName}
                   onChange={(e) => setCreateCompanyName(e.target.value)}
-                  className="w-full bg-[#0B0C0F] border border-[#2E2E2E] rounded-lg py-2 px-3 text-white focus:border-pink2 outline-none"
+                  className="w-full bg-[#0C0C0F] border border-[#2E2E2E] rounded-lg py-2 px-3 text-white focus:border-pink2 outline-none"
                   placeholder="e.g. Acme Events"
                 />
               </div>
