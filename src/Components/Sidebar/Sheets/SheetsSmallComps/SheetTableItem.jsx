@@ -708,7 +708,7 @@ const SheetTableItem = ({
     return () => document.removeEventListener("keydown", onKey);
   }, [clearConfirm.open]);
 
-  const renderField = (columnKey, columnType, column, colIdx) => {
+  const renderField = (columnKey, columnType, column, colIdx, isFirstVisibleForRow) => {
     const lowerKey = columnKey.toLowerCase();
     const lowerType = columnType?.toUpperCase();
 
@@ -720,6 +720,7 @@ const SheetTableItem = ({
         <div className="w-full">
           <Select
             suffixIcon={null}
+            autoFocus={!!(autoFocus && isFirstVisibleForRow)}
             onChange={(value) =>
               handleInputChange(lowerKey, { target: { value } })
             }
@@ -978,6 +979,7 @@ const SheetTableItem = ({
         <div className="w-full">
           <AntdDatePicker
             showTime
+            autoFocus={!!(autoFocus && isFirstVisibleForRow)}
             value={dateValue}
             onChange={(date) => {
               // when user clicks the clear (x) Antd passes null -> ask for confirmation
@@ -1029,6 +1031,7 @@ const SheetTableItem = ({
       return (
         <div className="w-full">
           <AntdRangePicker
+            autoFocus={!!(autoFocus && isFirstVisibleForRow)}
             value={rangeValue}
             onChange={(dates) => {
               // dates === null or [null,null] on clear -> confirm
@@ -1322,7 +1325,7 @@ const SheetTableItem = ({
     // Default input
     return (
       <Input
-        ref={autoFocus && colIdx === 0 ? firstInputRef : undefined}
+        ref={autoFocus && isFirstVisibleForRow ? firstInputRef : undefined}
         className="bg-grayDash border-none focus:bg-gray3 hover:bg-grayDash text-white text-[18px]"
         value={task[lowerKey] || ""}
         onChange={(e) => handleInputChange(lowerKey, e)}
@@ -1432,7 +1435,7 @@ const SheetTableItem = ({
         <tr
           data-task-id={task.id}
            // row controls hover color; cells use group-hover to respond
-           className={`task flex text-white border-[black] font-radioCanada group hover:bg-[#2A2D36] transition-colors ${isDeleting ? "opacity-60 pointer-events-none" : ""}`}
+           className={`task flex text-white border-[black] font-radioCanada group hover:bg-[#2A2D36] transition-colors ${isDeleting ? "opacity-60 pointer-events-none" : ""} ${isSelected ? "ring-2 ring-pink2 ring-offset-0" : ""}`}
            ref={provided.innerRef}
            {...provided.draggableProps}
            {...provided.dragHandleProps}
@@ -1482,6 +1485,7 @@ const SheetTableItem = ({
                 const isChatColumn = firstVisibleColumnKeyLower
                   ? String(column.key || "").toLowerCase() === firstVisibleColumnKeyLower
                   : false;
+                const isFirstVisibleForRow = isChatColumn; // first visible column hosts chat button
 
                 // base classes (sticky left for the first visible column if requested)
                 const baseSticky = stickyFirstThreeColumns && idx === 0 ? " sticky left-[48px] z-10 bg-grayDash" : "";
@@ -1496,7 +1500,7 @@ const SheetTableItem = ({
                       <div className="flex items-center gap-2">
                         {/* field takes remaining space */}
                         <div className="flex-1 min-w-0">
-                          {renderField(column.key, column.type, column, idx)}
+                          {renderField(column.key, column.type, column, idx, isFirstVisibleForRow)}
                         </div>
 
                         {/* chat button sits next to input; revealed on row hover */}
@@ -1526,7 +1530,7 @@ const SheetTableItem = ({
                     onClick={() => onEdit && onEdit()}
                   >
                     <div className="w-full">
-                      {renderField(column.key, column.type, column, idx)}
+                      {renderField(column.key, column.type, column, idx, false)}
                     </div>
                   </td>
                 );

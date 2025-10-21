@@ -426,18 +426,78 @@ const Sheets = () => {
   // Add this handler so calendar "Open task" can switch to table and focus the task
   const handleOpenTaskFromCalendar = (taskId) => {
     if (!taskId) return;
-    // switch to table view
+    
+    console.log('📅 Calendar navigation - Task ID:', taskId, 'Type:', typeof taskId); // Debug log
+    
+    // Switch to table view first
     setView("table");
-    // set selected task(s) so table shows it as selected
-    setSelectedTasks([taskId]);
-    // optionally navigate to page 1 so task is visible (adjust if you have server-side paging logic)
-    setCurrentPage(1);
-    // dispatch event for any components that need to focus the specific row
-    try {
-      window.dispatchEvent(new CustomEvent("focusTask", { detail: { taskId } }));
-    } catch (e) {
-      // ignore; old browsers may not support CustomEvent constructor
-    }
+    
+    // Use setTimeout to batch state updates
+    setTimeout(() => {
+      // Clear any search filters to ensure task is visible
+      setSearchParams({});
+      
+      // Clear sort filters to show all tasks
+      setSortFields({});
+      
+      // Reset to page 1 (task might be on different page with server-side pagination)
+      setCurrentPage(1);
+      
+      // Set selected task(s) so table shows it as selected
+      setSelectedTasks([taskId]);
+      
+      console.log('✅ State updated - View: table, Page: 1, Selected:', [taskId]);
+    }, 0);
+    
+    // Wait longer for table to render and data to load
+    const scrollToTask = () => {
+      try {
+        console.log('🔍 Looking for task with ID:', taskId); // Debug log
+        
+        // Find the task row by ID (assuming rows have data-task-id attribute)
+        const taskRow = document.querySelector(`[data-task-id="${taskId}"]`);
+        
+        console.log('📍 Task row found:', taskRow ? 'Yes' : 'No'); // Debug log
+        
+        if (taskRow) {
+          // Scroll the task into view with smooth animation
+          taskRow.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center',
+            inline: 'nearest'
+          });
+          
+          // Add a temporary highlight effect
+          taskRow.classList.add('calendar-highlight');
+          
+          console.log('✨ Highlight added to task'); // Debug log
+          
+          // Remove highlight after animation completes
+          setTimeout(() => {
+            taskRow.classList.remove('calendar-highlight');
+          }, 2000);
+        } else {
+          const availableTasks = Array.from(document.querySelectorAll('[data-task-id]'))
+            .map(el => el.getAttribute('data-task-id'));
+          
+          console.warn('⚠️ Task row not found in DOM.');
+          console.warn('Looking for:', taskId);
+          console.warn('Available task IDs:', availableTasks);
+          console.warn('Retrying in 500ms...');
+          
+          // Retry once after additional delay
+          setTimeout(scrollToTask, 500);
+        }
+        
+        // Also dispatch custom event for any other components
+        window.dispatchEvent(new CustomEvent("focusTask", { detail: { taskId } }));
+      } catch (e) {
+        console.error("❌ Error scrolling to task:", e);
+      }
+    };
+    
+    // Initial attempt after 800ms
+    setTimeout(scrollToTask, 800);
   };
 
   const handleSort = (newSortFields) => {
@@ -488,6 +548,11 @@ const Sheets = () => {
      },
     [sortedSheetsTabs, dndOrdersSheets, sheets, refetch]
   );
+
+  // Clear selected tasks when switching tabs/sheets or view
+  useEffect(() => {
+    setSelectedTasks([]);
+  }, [sheetId, view]);
 
   return (
     <>
@@ -873,7 +938,12 @@ const Sheets = () => {
                     )}
                     {view === "calendar" && (
                       <div className="">
-                        <SheetCalendar tasks={tasks} onOpenTask={handleOpenTaskFromCalendar} />
+                        <SheetCalendar
+                          tasks={tasks}
+                          // pass visible (active) columns so modal shows columns in same order as table
+                          columns={sheets?.columns?.filter(c => c && c.show) || []}
+                          onOpenTask={handleOpenTaskFromCalendar}
+                        />
                       </div>
                     )}
                   </motion.div>

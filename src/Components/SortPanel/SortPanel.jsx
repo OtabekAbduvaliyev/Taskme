@@ -4,6 +4,7 @@ import { IoClose } from 'react-icons/io5';
 import { Select } from 'antd';
 import { useSearchParams } from 'react-router-dom';
 import axiosInstance from '../../AxiosInctance/AxiosInctance';
+import defImg from "../../assets/default-avatar-icon-of-social-media-user-vector.jpg";
 
 // Add custom styles for modern Select components
 const styles = `
@@ -161,7 +162,52 @@ const SortPanel = ({ isOpen, onClose, onSort, columns = [], currentSort = {} }) 
         // Convert to object keyed by title preserving original casing
         const processedSelects = {};
         for (const [, v] of map) {
-          processedSelects[v.title] = v;
+          const key = (v.title || '').toString().toLowerCase();
+          if (!key) continue;
+          // store title lowercased as well so UI shows lowercased labels
+          processedSelects[key] = { ...v, title: key };
+        }
+
+        // Fetch members and add as a selectable group for sorting
+        try {
+          const memRes = await axiosInstance.get('/member', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const memPayload = Array.isArray(memRes.data)
+            ? memRes.data
+            : Array.isArray(memRes.data?.members)
+              ? memRes.data.members
+              : Array.isArray(memRes.data?.data)
+                ? memRes.data.data
+                : [];
+
+          if (memPayload && memPayload.length) {
+            const membersOptions = memPayload.map((m) => {
+              const user = m.user || {};
+              const name = `${(user.firstName || '').trim()} ${(user.lastName || '').trim()}`.trim() || user.email || m.id;
+              const avatar = user.avatar?.path ? `https://eventify.preview.uz/${user.avatar.path}` : null;
+              return { value: m.id, label: name, email: user.email, avatar };
+            }).filter(Boolean);
+
+            // only set if there are options
+            if (membersOptions.length) {
+              // use lowercase key "members" and merge if present
+              const membersKey = 'members';
+              if (!processedSelects[membersKey]) {
+                processedSelects[membersKey] = { title: membersKey, options: membersOptions };
+              } else {
+                const exist = processedSelects[membersKey];
+                membersOptions.forEach((opt) => {
+                  if (!exist.options.find((o) => o.value === opt.value)) {
+                    exist.options.push(opt);
+                  }
+                });
+              }
+            }
+          }
+        } catch (memErr) {
+          // non-fatal: just log and continue
+          console.error('Error fetching members for sort panel:', memErr);
         }
 
         setSelectOptions(processedSelects);
@@ -179,8 +225,13 @@ const SortPanel = ({ isOpen, onClose, onSort, columns = [], currentSort = {} }) 
     if (sortParam) {
       try {
         const parsedSort = JSON.parse(sortParam);
-        setSortFields(parsedSort);
-        onSort(parsedSort);
+        // normalize keys to lower case
+        const normalized = Object.entries(parsedSort || {}).reduce((acc, [k, v]) => {
+          acc[k.toString().toLowerCase()] = v;
+          return acc;
+        }, {});
+        setSortFields(normalized);
+        onSort(normalized);
       } catch (e) {
         console.error('Invalid sort parameter:', e);
       }
@@ -204,7 +255,7 @@ const SortPanel = ({ isOpen, onClose, onSort, columns = [], currentSort = {} }) 
     // Format fields while preserving original case
     const formattedSortFields = Object.entries(sortFields).reduce((acc, [key, values]) => {
       if (values && values.length) {
-        acc[key] = values.map(v => String(v));
+        acc[key.toString().toLowerCase()] = values.map(v => String(v));
       }
       return acc;
     }, {});
@@ -266,24 +317,61 @@ const SortPanel = ({ isOpen, onClose, onSort, columns = [], currentSort = {} }) 
           {Object.entries(selectOptions).map(([field, select]) => (
             <div key={field} className="space-y-3">
               <label className="text-gray4 text-sm font-medium capitalize block">{field}</label>
-              <Select
-                mode="multiple"
-                allowClear
-                style={{ width: '100%' }}
-                placeholder={`Select ${field}`}
-                value={sortFields[field] || []}
-                onChange={(values) => handleFieldChange(field, values)}
-                options={select.options}
-                className="sort-select-modern"
-                maxTagCount="responsive"
-                dropdownStyle={{      
-                  backgroundColor: '#20232A',
-                  border: '1px solid rgba(42, 45, 54, 0.2)',
-                  borderRadius: '12px',
-                  padding: '8px'
-                }}
-                dropdownClassName="modern-dropdown"
-              />
+              {field === 'Members' ? (
+                <Select
+                  mode="multiple"
+                  allowClear
+                  style={{ width: '100%' }}
+                  placeholder={`Select ${field}`}
+                  value={sortFields[field] || []}
+                  onChange={(values) => handleFieldChange(field, values)}
+                  optionLabelProp="label"
+                  className="sort-select-modern"
+                  maxTagCount="responsive"
+                  dropdownStyle={{
+                    backgroundColor: '#20232A',
+                    border: '1px solid rgba(42, 45, 54, 0.2)',
+                    borderRadius: '12px',
+                    padding: '8px'
+                  }}
+                  dropdownClassName="modern-dropdown"
+                >
+                  {select.options.map(opt => (
+                    <Select.Option key={opt.value} value={opt.value} label={opt.label}>
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={opt.avatar || defImg}
+                          alt={opt.label}
+                          className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                        />
+                        <div className="min-w-0">
+                          <div className="text-white text-sm truncate">{opt.label}</div>
+                          {opt.email && <div className="text-xs text-gray2 truncate">{opt.email}</div>}
+                        </div>
+                      </div>
+                    </Select.Option>
+                  ))}
+                </Select>
+              ) : (
+                <Select
+                  mode="multiple"
+                  allowClear
+                  style={{ width: '100%' }}
+                  placeholder={`Select ${field}`}
+                  value={sortFields[field] || []}
+                  onChange={(values) => handleFieldChange(field, values)}
+                  options={select.options}
+                  className="sort-select-modern"
+                  maxTagCount="responsive"
+                  dropdownStyle={{
+                    backgroundColor: '#20232A',
+                    border: '1px solid rgba(42, 45, 54, 0.2)',
+                    borderRadius: '12px',
+                    padding: '8px'
+                  }}
+                  dropdownClassName="modern-dropdown"
+                />
+              )}
             </div>
           ))}
         </div>

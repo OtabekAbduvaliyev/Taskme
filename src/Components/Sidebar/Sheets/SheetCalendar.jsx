@@ -1,288 +1,691 @@
-import React, { useMemo, useState } from "react";
-import FullCalendar from "@fullcalendar/react";
-import dayGridPlugin from "@fullcalendar/daygrid";
-import timeGridPlugin from "@fullcalendar/timegrid";
-import interactionPlugin from "@fullcalendar/interaction";
-import listPlugin from "@fullcalendar/list";
-import { Modal, Avatar, Tooltip } from "antd";
+import React, { useState, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { IoChevronBack, IoChevronForward, IoAddCircleOutline, IoCalendarOutline } from "react-icons/io5";
+import { BiCalendar } from "react-icons/bi";
+import { BsCalendar3 } from "react-icons/bs";
 import dayjs from "dayjs";
-// NOTE: Avoid importing plugin CSS directly here to prevent the "Missing './main.css' specifier" error.
-// Include FullCalendar CSS globally instead (e.g. in your main app CSS or via CDN):
-//   import 'path/to/node_modules/@fullcalendar/common/main.css';
-//   import 'path/to/node_modules/@fullcalendar/daygrid/main.css';
-// or add the official CDN links in index.html.
+import isBetween from "dayjs/plugin/isBetween";
+import DayTasksModal from "./SheetsSmallComps/DayTasksModal";
 
-const SheetCalendar = ({ tasks = [], onOpenTask }) => {
-  const [modalOpen, setModalOpen] = useState(false);
-  const [selectedEvent, setSelectedEvent] = useState(null);
+dayjs.extend(isBetween);
 
-  // deterministic hash to map an id -> palette index
-  const stableIndex = (id, modulo) => {
-    if (id == null) return 0;
-    // try numeric id first
-    const n = Number(id);
-    if (!Number.isNaN(n)) return Math.abs(Math.floor(n)) % modulo;
-    // otherwise sum char codes
-    const s = String(id);
-    let sum = 0;
-    for (let i = 0; i < s.length; i++) sum = (sum + s.charCodeAt(i)) | 0;
-    return Math.abs(sum) % modulo;
+const SheetCalendar = ({ tasks = [], columns = [], onOpenTask }) => {
+  const [currentMonth, setCurrentMonth] = useState(dayjs());
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isYearMonthPickerOpen, setIsYearMonthPickerOpen] = useState(false);
+
+  // Get priority color from palette
+  const getPriorityColor = (priority) => {
+    switch (priority?.toLowerCase()) {
+      case "high":
+        return "#DC5091"; // selectRed1
+      case "medium":
+        return "#BF7E1C"; // yellow
+      case "low":
+        return "#0EC359"; // selectGreen1
+      default:
+        return "#7658B1"; // pink2
+    }
   };
 
-  // 5-color palette (bg + text) — change shades as you like
-  const palette = [
-    { background: "#F472B6", text: "#1F0A10" }, // pink
-    { background: "#60A5FA", text: "#021331" }, // blue
-    { background: "#34D399", text: "#02281A" }, // green
-    { background: "#FBBF24", text: "#2B1700" }, // amber
-    { background: "#A78BFA", text: "#110827" }, // purple
-  ];
+  // Get status color from columns configuration
+  const getStatusColor = (status) => {
+    if (!status || !columns?.length) return "#7658B1"; // default pink2
+    
+    const statusCol = columns.find(c => 
+      c?.key?.toLowerCase() === "status" || c?.name?.toLowerCase() === "status"
+    );
+    
+    if (statusCol?.selects?.[0]?.options) {
+      const option = statusCol.selects[0].options.find(
+        opt => opt?.name?.toLowerCase() === status?.toLowerCase()
+      );
+      if (option?.color) return option.color;
+    }
+    
+    return "#7658B1"; // default
+  };
 
-  // Build FullCalendar event objects from tasks
-  const events = useMemo(() => {
-    // fields to check (prioritized)
-    const dateKeys = [
-      "duedate",
-      "duedate1",
-      "duedate2",
-      "duedate3",
-      "duedate4",
-      "duedate5",
-      "dueDate",
-      "due_date",
-      "deadline",
-      "date1",
-      "date2",
-      "date",
-      "startDate",
-      "start_date",
-      "start",
-    ];
-
-    const parseVal = (raw) => {
-      if (!raw && raw !== 0) return null;
-      if (raw instanceof Date && !isNaN(raw)) return raw;
-      // raw can be ISO string, numeric timestamp string/number, or dayjs-like
-      const d = dayjs(raw);
-      return d.isValid() ? d.toDate() : null;
-    };
-
-    const isDateOnlyString = (s) => {
-      if (!s) return false;
-      return /^\d{4}-\d{2}-\d{2}$/.test(String(s).trim());
-    };
-
-    return tasks
-      .map((t) => {
-        // find first available date-like field
-        let rawStart = null;
-        let rawEnd = null;
-        for (const k of dateKeys) {
-          const v = t[k];
-          if (v === undefined || v === null) continue;
-          // if array (range), prefer that
-          if (Array.isArray(v)) {
-            rawStart = v[0] || null;
-            rawEnd = v[1] || null;
-            break;
+  // Parse task dates and organize by day
+  const tasksByDate = useMemo(() => {
+    const dateMap = {};
+    
+    if (!tasks || !Array.isArray(tasks)) return dateMap;
+    
+    tasks.forEach(task => {
+      if (!task) return;
+      
+      // Collect all date fields (date1-date5)
+      const dateFields = ['date1', 'date2', 'date3', 'date4', 'date5'];
+      const allDates = [];
+      
+      for (const field of dateFields) {
+        if (task[field]) {
+          const parsed = dayjs(task[field]);
+          if (parsed.isValid()) {
+            allDates.push({ date: parsed, field, isDueDate: false });
           }
-          // otherwise single value
-          rawStart = v;
-          rawEnd = null;
-          break;
         }
-
-        if (!rawStart) return null;
-
-        const start = parseVal(rawStart);
-        const end = parseVal(rawEnd);
-        if (!start) {
-          // eslint-disable-next-line no-console
-          console.warn(`[SheetCalendar] Unparsable date for task id=${t.id}`, { rawStart, rawEnd });
-          return null;
+      }
+      
+      // Collect all due dates (duedate1-duedate5 are arrays)
+      const dueDateFields = ['duedate1', 'duedate2', 'duedate3', 'duedate4', 'duedate5'];
+      
+      for (const field of dueDateFields) {
+        if (Array.isArray(task[field]) && task[field].length > 0) {
+          task[field].forEach(dateValue => {
+            if (dateValue) {
+              const parsed = dayjs(dateValue);
+              if (parsed.isValid()) {
+                allDates.push({ date: parsed, field, isDueDate: true });
+              }
+            }
+          });
+        } else if (task[field] && typeof task[field] === 'string') {
+          // Handle case where duedate might be a single string
+          const parsed = dayjs(task[field]);
+          if (parsed.isValid()) {
+            allDates.push({ date: parsed, field, isDueDate: true });
+          }
         }
-
-        // treat clearly date-only strings as allDay events
-        const allDay =
-          isDateOnlyString(rawStart) ||
-          (!String(rawStart).includes("T") &&
-            dayjs(rawStart).hour() === 0 &&
-            dayjs(rawStart).minute() === 0);
-
-        // pick palette color deterministically using task id
-        const idx = stableIndex(t.id ?? t._id ?? t.name ?? "", palette.length);
-        const colors = palette[idx];
-
-        return {
-          id: String(t.id),
-          title: t.name || "Untitled",
-          start,
-          end: end || null,
-          allDay,
-          backgroundColor: colors.background,
-          borderColor: colors.background,
-          textColor: colors.text,
-          extendedProps: {
-            status: t.status,
-            // keep description in extendedProps if needed elsewhere, but we will not render it
-            description: t.description,
-            assignee: t.assignee,
-            original: t,
-          },
-        };
-      })
-      .filter(Boolean);
+      }
+      
+      // If no valid dates found, skip this task
+      if (allDates.length === 0) return;
+      
+      // Sort dates chronologically
+      allDates.sort((a, b) => a.date.valueOf() - b.date.valueOf());
+      
+      // Get first and last dates
+      const startDate = allDates[0].date;
+      const endDate = allDates.length > 1 ? allDates[allDates.length - 1].date : null;
+      const isFirstDueDate = allDates[0].isDueDate;
+      
+      // If task has multiple dates spanning days, show it across all days in range
+      if (endDate && endDate.isAfter(startDate, 'day')) {
+        let current = startDate.clone();
+        let dayCount = 0;
+        const maxDays = 365; // Safety limit to prevent infinite loops
+        
+        while ((current.isBefore(endDate, 'day') || current.isSame(endDate, 'day')) && dayCount < maxDays) {
+          const key = current.format("YYYY-MM-DD");
+          if (!dateMap[key]) dateMap[key] = [];
+          dateMap[key].push({ 
+            ...task, 
+            __isMultiDay: true,
+            __isStart: current.isSame(startDate, 'day'),
+            __isEnd: current.isSame(endDate, 'day'),
+            __isDueDate: isFirstDueDate,
+            __displayDate: startDate.format("YYYY-MM-DD"),
+            __allDates: allDates,
+          });
+          current = current.add(1, 'day');
+          dayCount++;
+        }
+      } else {
+        // Single day task
+        const key = startDate.format("YYYY-MM-DD");
+        if (!dateMap[key]) dateMap[key] = [];
+        dateMap[key].push({ 
+          ...task, 
+          __isMultiDay: false,
+          __isDueDate: isFirstDueDate,
+          __displayDate: startDate.format("YYYY-MM-DD"),
+          __allDates: allDates,
+        });
+      }
+    });
+    
+    return dateMap;
   }, [tasks]);
 
-  return (
-    <div className="calendar-view bg-grayDash rounded-xl p-4 relative">
-      {/* Updated scoped style:
-          - toolbar title & day numbers: light gray (gray-300)
-          - weekday headers: dark grayDash background so white weekday text is readable
-      */}
-      <style>{`
-        /* Month title (toolbar) -> gray-300 */
-        .calendar-view .fc .fc-toolbar-title { color: #D1D5DB !important; }
+  // Generate calendar days for current month
+  const calendarDays = useMemo(() => {
+    const startOfMonth = currentMonth.startOf("month");
+    const endOfMonth = currentMonth.endOf("month");
+    const startDay = startOfMonth.day(); // 0 = Sunday
+    const daysInMonth = currentMonth.daysInMonth();
+    
+    const days = [];
+    
+    // Previous month's trailing days
+    for (let i = 0; i < startDay; i++) {
+      const date = startOfMonth.subtract(startDay - i, "day");
+      days.push({
+        date,
+        isCurrentMonth: false,
+        key: date.format("YYYY-MM-DD"),
+      });
+    }
+    
+    // Current month days
+    for (let i = 1; i <= daysInMonth; i++) {
+      const date = startOfMonth.date(i);
+      days.push({
+        date,
+        isCurrentMonth: true,
+        isToday: date.isSame(dayjs(), "day"),
+        key: date.format("YYYY-MM-DD"),
+      });
+    }
+    
+    // Next month's leading days to complete the grid
+    const remainingDays = 42 - days.length; // 6 rows × 7 days
+    for (let i = 1; i <= remainingDays; i++) {
+      const date = endOfMonth.add(i, "day");
+      days.push({
+        date,
+        isCurrentMonth: false,
+        key: date.format("YYYY-MM-DD"),
+      });
+    }
+    
+    return days;
+  }, [currentMonth]);
 
-        /* Column headers (Mon, Tue, ...) -> white text on grayDash background */
-        .calendar-view .fc .fc-col-header-cell,
-        .calendar-view .fc .fc-col-header-cell .fc-col-header-cell-cushion {
-          color: #ffffff !important;
-          background-color: #0f1724 !important; /* match grayDash-like background */
+  const handlePrevMonth = () => {
+    setCurrentMonth(prev => prev.subtract(1, "month"));
+  };
+
+  const handleNextMonth = () => {
+    setCurrentMonth(prev => prev.add(1, "month"));
+  };
+
+  const handleToday = () => {
+    setCurrentMonth(dayjs());
+  };
+
+  const handleDayClick = (day, dayTasks) => {
+    if (dayTasks?.length > 0) {
+      setSelectedDate(day.key);
+      setIsModalOpen(true);
+    }
+    // TODO: If empty day clicked, trigger create task with that date pre-filled
+  };
+
+  const handleTaskClick = (taskId) => {
+    console.log('📅 Calendar: Task clicked, ID:', taskId, 'Type:', typeof taskId);
+    setIsModalOpen(false);
+    if (typeof onOpenTask === "function") {
+      console.log('📅 Calendar: Calling onOpenTask with ID:', taskId);
+      onOpenTask(taskId);
+    } else {
+      console.warn('⚠️ Calendar: onOpenTask function not provided!');
+    }
+  };
+
+  const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+  // Check if there are any tasks at all
+  const hasAnyTasks = tasks && tasks.length > 0;
+  
+  // Count tasks with valid dates
+  const tasksWithDates = useMemo(() => {
+    if (!tasks || !Array.isArray(tasks)) return 0;
+    return tasks.filter(task => {
+      if (!task) return false;
+      
+      // Check date1-date5
+      const dateFields = ['date1', 'date2', 'date3', 'date4', 'date5'];
+      const hasDateField = dateFields.some(field => {
+        if (task[field]) {
+          const parsed = dayjs(task[field]);
+          return parsed.isValid();
         }
-
-        /* Day numbers in month view -> gray-300 */
-        .calendar-view .fc .fc-daygrid-day-number { color: #D1D5DB !important; }
-
-        /* Small top area inside day cell -> ensure consistency */
-        .calendar-view .fc .fc-daygrid-day-top { color: #D1D5DB !important; }
-
-        /* Event titles remain controlled by event textColor, but ensure fallback visibility */
-        .calendar-view .fc .fc-event-title { color: inherit !important; }
-
-        /* Subtle highlight for today */
-        .calendar-view .fc .fc-daygrid-day.fc-day-today { background: rgba(255,255,255,0.02); }
-      `}</style>
-      <FullCalendar
-        plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin]}
-        initialView="dayGridMonth"
-        headerToolbar={{
-          left: "prev,next today",
-          center: "title",
-          right: "dayGridMonth,timeGridWeek,timeGridDay,listWeek",
-        }}
-        height="auto"
-        events={events}
-        eventClick={(info) => {
-          setSelectedEvent({
-            id: info.event.id,
-            title: info.event.title,
-            start: info.event.start,
-            end: info.event.end,
-            extendedProps: info.event.extendedProps,
+        return false;
+      });
+      
+      if (hasDateField) return true;
+      
+      // Check duedate1-duedate5 (arrays or strings)
+      const dueDateFields = ['duedate1', 'duedate2', 'duedate3', 'duedate4', 'duedate5'];
+      return dueDateFields.some(field => {
+        if (Array.isArray(task[field]) && task[field].length > 0) {
+          return task[field].some(dateValue => {
+            if (dateValue) {
+              const parsed = dayjs(dateValue);
+              return parsed.isValid();
+            }
+            return false;
           });
-          setModalOpen(true);
-        }}
-        dayMaxEventRows={3}
-        eventTimeFormat={{
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: false,
-        }}
-        displayEventEnd={true}
-        nowIndicator={true}
-        eventDidMount={(info) => {
-          if (info.event.backgroundColor) {
-            info.el.style.backgroundColor = info.event.backgroundColor;
-            info.el.style.borderColor = info.event.backgroundColor;
-          }
-          if (info.event.textColor) {
-            info.el.style.color = info.event.textColor;
-          }
-          info.el.style.fontWeight = "600";
-          info.el.style.borderRadius = "6px";
-        }}
-      />
+        } else if (task[field] && typeof task[field] === 'string') {
+          const parsed = dayjs(task[field]);
+          return parsed.isValid();
+        }
+        return false;
+      });
+    }).length;
+  }, [tasks]);
+  
+  // Debug: Uncomment to see task parsing info
+  // React.useEffect(() => {
+  //   console.log('📅 Calendar Debug:', {
+  //     totalTasks: tasks?.length || 0,
+  //     tasksWithDates,
+  //     daysWithTasks: Object.keys(tasksByDate).length,
+  //     tasksByDate: Object.entries(tasksByDate).slice(0, 5), // First 5 days
+  //   });
+  // }, [tasks, tasksWithDates, tasksByDate]);
 
-      <Modal
-        title={selectedEvent ? selectedEvent.title : ""}
-        open={modalOpen}
-        onOk={() => setModalOpen(false)}
-        onCancel={() => setModalOpen(false)}
-        footer={null}
+  // Generate month/year picker options
+  const generateMonthYearOptions = () => {
+    const months = [];
+    const currentYear = dayjs().year();
+    for (let year = currentYear - 2; year <= currentYear + 2; year++) {
+      for (let month = 0; month < 12; month++) {
+        months.push(dayjs().year(year).month(month));
+      }
+    }
+    return months;
+  };
+
+  return (
+    <div className="w-full h-full flex flex-col bg-grayDash rounded-xl overflow-hidden">
+      {/* Header */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 px-4 sm:px-6 py-4 sm:py-5 bg-gray3 border-b border-gray4/30"
       >
-        {selectedEvent && (
-          <div className="space-y-3">
-            {/* description removed per request; show status only */}
-            <div className="flex items-center gap-2">
-              <strong className="text-xs text-gray2">Status:</strong>
-              <span
-                className={`text-xs rounded px-2 py-1 ${
-                  (selectedEvent.extendedProps?.status || "").toLowerCase() === "done"
-                    ? "bg-green-200 text-green-700"
-                    : (selectedEvent.extendedProps?.status || "").toLowerCase() === "in progress"
-                    ? "bg-yellow-200 text-yellow-700"
-                    : (selectedEvent.extendedProps?.status || "").toLowerCase() === "todo"
-                    ? "bg-gray-300 text-gray-700"
-                    : "bg-pink2/10 text-pink2"
-                }`}
+        <div className="flex items-center gap-3 sm:gap-4">
+          <BiCalendar className="text-pink2 text-2xl sm:text-3xl" />
+          <button
+            onClick={() => setIsYearMonthPickerOpen(!isYearMonthPickerOpen)}
+            className="text-white text-xl sm:text-2xl font-bold hover:text-pink2 transition-colors flex items-center gap-2 group"
+          >
+            {currentMonth.format("MMMM YYYY")}
+            <IoCalendarOutline className="text-lg opacity-0 group-hover:opacity-100 transition-opacity" />
+          </button>
+        </div>
+        
+        <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto justify-end">
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={handleToday}
+            className="px-3 py-1.5 sm:px-4 sm:py-2 bg-gray4 hover:bg-pink2 text-white text-sm font-medium rounded-lg transition-colors duration-200"
+          >
+            Today
+          </motion.button>
+          
+          <div className="flex items-center gap-1">
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              onClick={handlePrevMonth}
+              className="p-2 rounded-lg bg-gray4 hover:bg-pink2 text-white transition-colors duration-200"
+              aria-label="Previous month"
+            >
+              <IoChevronBack className="text-lg" />
+            </motion.button>
+            
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              onClick={handleNextMonth}
+              className="p-2 rounded-lg bg-gray4 hover:bg-pink2 text-white transition-colors duration-200"
+              aria-label="Next month"
+            >
+              <IoChevronForward className="text-lg" />
+            </motion.button>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Month/Year Picker Dropdown */}
+      <AnimatePresence>
+        {isYearMonthPickerOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden bg-gray3 border-b border-gray4/30"
+          >
+            <div className="px-4 sm:px-6 py-3 max-h-48 overflow-y-auto custom-scrollbar">
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                {generateMonthYearOptions().map((monthYear) => (
+                  <motion.button
+                    key={monthYear.format("YYYY-MM")}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                      setCurrentMonth(monthYear);
+                      setIsYearMonthPickerOpen(false);
+                    }}
+                    className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                      monthYear.isSame(currentMonth, "month")
+                        ? "bg-pink2 text-white"
+                        : "bg-gray4 text-white2 hover:bg-gray2"
+                    }`}
+                  >
+                    {monthYear.format("MMM 'YY")}
+                  </motion.button>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Weekday headers */}
+      <div className="grid grid-cols-7 gap-px bg-gray4/30 border-b border-gray4/30">
+        {weekDays.map((day) => (
+          <motion.div
+            key={day}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="bg-gray3 py-2 sm:py-3 text-center"
+          >
+            <span className="text-white2 text-xs sm:text-sm font-semibold uppercase tracking-wide">
+              {day}
+            </span>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Empty state when no tasks or no tasks with dates */}
+      {!hasAnyTasks && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex-1 flex items-center justify-center p-8"
+        >
+          <div className="text-center max-w-md">
+            <motion.div
+              initial={{ scale: 0.8 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", duration: 0.6 }}
+              className="w-24 h-24 mx-auto mb-6 rounded-full bg-gradient-to-br from-pink2/20 to-selectPurple1/20 flex items-center justify-center"
+            >
+              <BsCalendar3 className="text-pink2 text-4xl" />
+            </motion.div>
+            <h3 className="text-white text-xl font-bold mb-2">No Tasks Scheduled</h3>
+            <p className="text-white2 text-sm mb-6">
+              Start planning your work by creating tasks with start and end dates.
+              They'll appear here on the calendar for easy scheduling.
+            </p>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                // Switch to table view to create tasks
+                // This will be handled by parent component
+              }}
+              className="px-6 py-3 bg-pink2 hover:bg-pink2/80 text-white font-medium rounded-lg transition-colors duration-200 flex items-center gap-2 mx-auto"
+            >
+              <IoAddCircleOutline className="text-xl" />
+              Create Your First Task
+            </motion.button>
+          </div>
+        </motion.div>
+      )}
+      
+      {/* Info message when tasks exist but have no dates */}
+      {hasAnyTasks && tasksWithDates === 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex-1 flex items-center justify-center p-8"
+        >
+          <div className="text-center max-w-lg">
+            <motion.div
+              initial={{ scale: 0.8 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", duration: 0.6 }}
+              className="w-24 h-24 mx-auto mb-6 rounded-full bg-gradient-to-br from-yellow/20 to-selectRed1/20 flex items-center justify-center"
+            >
+              <BsCalendar3 className="text-yellow text-4xl" />
+            </motion.div>
+            <h3 className="text-white text-xl font-bold mb-2">Add Dates to Your Tasks</h3>
+            <p className="text-white2 text-sm mb-4">
+              You have {tasks.length} {tasks.length === 1 ? "task" : "tasks"}, but none have start or end dates.
+              Add dates to your tasks in the table view to see them on the calendar.
+            </p>
+            <div className="bg-gray4/30 rounded-lg p-4 mb-6 border border-gray4/50">
+              <p className="text-white2 text-xs text-left">
+                <span className="font-semibold text-white">💡 Tip:</span> Switch to table view and add dates using the date columns (Date 1-5) or due date columns (Due Date 1-5). 
+                Tasks with dates will automatically appear on the calendar.
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Calendar grid */}
+      {hasAnyTasks && tasksWithDates > 0 && (
+        <div className="flex-1 overflow-auto custom-scrollbar">
+          <div className="grid grid-cols-7 gap-px bg-gray4/30 min-h-full">
+          {calendarDays.map((day, index) => {
+            const dayTasks = tasksByDate[day.key] || [];
+            const visibleTaskLimit = 3;
+            const visibleTasks = dayTasks.slice(0, visibleTaskLimit);
+            const overflowCount = dayTasks.length - visibleTaskLimit;
+
+            return (
+              <motion.div
+                key={day.key}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: index * 0.005, duration: 0.2 }}
+                onClick={() => handleDayClick(day, dayTasks)}
+                className={`
+                  relative min-h-[100px] sm:min-h-[120px] lg:min-h-[140px] p-2 sm:p-3
+                  transition-all duration-200 cursor-pointer group
+                  ${day.isCurrentMonth ? "bg-gray3" : "bg-gray3/40"}
+                  ${day.isToday ? "ring-2 ring-pink2 ring-inset" : ""}
+                  hover:bg-gray2/30
+                `}
               >
-                {selectedEvent.extendedProps?.status || "N/A"}
-              </span>
-            </div>
+                {/* Day number */}
+                <div className="flex items-start justify-between mb-1.5 sm:mb-2">
+                  <span
+                    className={`
+                      text-sm sm:text-base font-semibold rounded-full w-7 h-7 sm:w-8 sm:h-8 
+                      flex items-center justify-center transition-colors
+                      ${day.isToday 
+                        ? "bg-pink2 text-white" 
+                        : day.isCurrentMonth 
+                          ? "text-white group-hover:bg-gray4" 
+                          : "text-white2"
+                      }
+                    `}
+                  >
+                    {day.date.date()}
+                  </span>
+                  
+                  {/* Quick add button (visible on hover) */}
+                  {day.isCurrentMonth && (
+                    <motion.button
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded-md hover:bg-pink2/20"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // TODO: Trigger create task modal with this date pre-filled
+                      }}
+                      aria-label="Add task"
+                    >
+                      <IoAddCircleOutline className="text-pink2 text-lg" />
+                    </motion.button>
+                  )}
+                </div>
 
-            <div className="flex items-center gap-3">
-              <div className="text-xs text-gray2">
-                Start:{" "}
-                {selectedEvent.start
-                  ? new Date(selectedEvent.start).toLocaleString()
-                  : "N/A"}
-              </div>
-              <div className="text-xs text-gray2">
-                End:{" "}
-                {selectedEvent.end
-                  ? new Date(selectedEvent.end).toLocaleString()
-                  : "N/A"}
-              </div>
-            </div>
+                {/* Tasks */}
+                <div className="space-y-1">
+                  {visibleTasks.map((task, idx) => {
+                    const bgColor = task.priority 
+                      ? getPriorityColor(task.priority)
+                      : getStatusColor(task.status);
+                    
+                    // Build tooltip with date info
+                    let tooltip = `${task.name || "Untitled"}`;
+                    if (task.priority) tooltip += ` • ${task.priority}`;
+                    if (task.status) tooltip += ` • ${task.status}`;
+                    if (task.price) tooltip += ` • $${task.price}`;
+                    if (task.__isDueDate) tooltip += ` • Due Date`;
+                    
+                    return (
+                      <motion.div
+                        key={task.id + "-" + idx}
+                        initial={{ opacity: 0, x: -5 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.05 * idx }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleTaskClick(task.id);
+                        }}
+                        className={`
+                          text-xs px-2 py-1 rounded-md font-medium cursor-pointer
+                          hover:shadow-lg hover:shadow-black/20 transform hover:scale-[1.02] 
+                          transition-all duration-200 group relative
+                          ${task.__isMultiDay && !task.__isStart ? "rounded-l-none" : ""}
+                          ${task.__isMultiDay && !task.__isEnd ? "rounded-r-none" : ""}
+                          ${task.__isDueDate ? "border-2" : "border"}
+                        `}
+                        style={{
+                          backgroundColor: task.__isDueDate ? bgColor + "CC" : bgColor + "E6", // 80% for due dates, 90% for regular
+                          color: "#EFEBF6", // white from palette
+                          borderColor: task.__isDueDate ? "#EFEBF6" : bgColor,
+                          borderStyle: task.__isDueDate ? "dashed" : "solid",
+                        }}
+                        title={tooltip}
+                      >
+                        <div className="flex items-center gap-1 w-full">
+                          {/* Due date indicator */}
+                          {task.__isDueDate && (
+                            <span className="text-[10px] flex-shrink-0 opacity-90" title="Due Date">⏰</span>
+                          )}
+                          
+                          {/* Multi-day start indicator */}
+                          {task.__isMultiDay && task.__isStart && !task.__isDueDate && (
+                            <span className="text-[10px] flex-shrink-0 opacity-90">▶</span>
+                          )}
+                          
+                          {/* Task name */}
+                          <span className="truncate flex-1 text-[11px] sm:text-xs font-medium">
+                            {task.name || "Untitled"}
+                          </span>
+                          
+                          {/* Price badge */}
+                          {typeof task.price !== "undefined" && task.price !== null && (
+                            <span className="ml-auto text-[10px] font-bold flex-shrink-0 bg-white/20 px-1.5 py-0.5 rounded">
+                              ${task.price}
+                            </span>
+                          )}
+                        </div>
+                        
+                        {/* Hover effect overlay */}
+                        <div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 rounded-md transition-colors pointer-events-none" />
+                      </motion.div>
+                    );
+                  })}
+                  
+                  {/* Overflow indicator */}
+                  {overflowCount > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDayClick(day, dayTasks);
+                      }}
+                      className="text-xs px-2 py-1 rounded-md font-semibold bg-gray4/80 text-white2 hover:bg-pink2 hover:text-white transition-all duration-200 cursor-pointer border border-gray4 hover:border-pink2 hover:shadow-md"
+                    >
+                      +{overflowCount} more
+                    </motion.div>
+                  )}
+                </div>
 
-            {selectedEvent.extendedProps?.assignee && (
-              <div className="flex items-center gap-2">
-                <Tooltip title={selectedEvent.extendedProps.assignee}>
-                  <Avatar size={22} className="bg-pink2/80 text-white font-bold">
-                    {typeof selectedEvent.extendedProps.assignee === "string"
-                      ? selectedEvent.extendedProps.assignee[0]?.toUpperCase()
-                      : "?"}
-                  </Avatar>
-                </Tooltip>
-                <div className="text-sm text-white">
-                  {selectedEvent.extendedProps.assignee}
+                {/* Task count badge (for mobile) */}
+                {dayTasks.length > 0 && (
+                  <div className="absolute top-1 right-1 sm:hidden">
+                    <div className="w-5 h-5 rounded-full bg-pink2 flex items-center justify-center">
+                      <span className="text-white text-[10px] font-bold">
+                        {dayTasks.length}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            );
+          })}
+          </div>
+        </div>
+      )}
+
+      {/* Legend & Statistics */}
+      {hasAnyTasks && tasksWithDates > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="px-4 sm:px-6 py-3 bg-gray3 border-t border-gray4/30"
+        >
+          <div className="flex flex-col gap-3">
+            {/* Top row: Priority + Task Type */}
+            <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4 text-xs sm:text-sm">
+              {/* Priority Legend */}
+              <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+                <span className="text-white2 font-semibold">Priority:</span>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded" style={{ backgroundColor: "#DC5091" }} />
+                  <span className="text-white2">High</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded" style={{ backgroundColor: "#BF7E1C" }} />
+                  <span className="text-white2">Medium</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded" style={{ backgroundColor: "#0EC359" }} />
+                  <span className="text-white2">Low</span>
                 </div>
               </div>
-            )}
-
-            {selectedEvent.extendedProps?.original?.id && (
-              <div className="mt-3">
-                {/* call prop instead of using href so parent can switch view and focus */}
-                <button
-                  type="button"
-                  className="text-pink2 text-sm font-semibold bg-transparent border-none p-0"
-                  onClick={() => {
-                    setModalOpen(false);
-                    if (typeof onOpenTask === "function") {
-                      // pass original task id (string/number)
-                      const taskId = selectedEvent.extendedProps.original.id;
-                      onOpenTask(taskId);
-                    }
-                  }}
-                >
-                  Open task
-                </button>
+              
+              {/* Task Type Legend */}
+              <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+                <span className="text-white2 font-semibold">Type:</span>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-4 h-3 rounded border border-gray4 bg-gray4/50" />
+                  <span className="text-white2">Date</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-4 h-3 rounded border-2 border-dashed border-white2 bg-gray4/30" />
+                  <span className="text-white2">⏰ Due Date</span>
+                </div>
               </div>
-            )}
+            </div>
+            
+            {/* Bottom row: Statistics + Hints */}
+            <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+              {/* Task Statistics */}
+              <div className="flex items-center gap-2">
+                <span className="text-white2">
+                  {tasks.length} {tasks.length === 1 ? "task" : "tasks"} total
+                </span>
+                <span className="text-gray4">•</span>
+                <span className="text-white2">
+                  {Object.keys(tasksByDate).length} {Object.keys(tasksByDate).length === 1 ? "day" : "days"} scheduled
+                </span>
+              </div>
+              
+              {/* Interaction hint */}
+              <div className="text-white2 opacity-75">
+                💡 Click task to open • "+X more" for all
+              </div>
+            </div>
           </div>
-        )}
-      </Modal>
+        </motion.div>
+      )}
+
+      {/* Day Tasks Modal */}
+      <DayTasksModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        dateStr={selectedDate}
+        tasks={tasksByDate[selectedDate] || []}
+        onOpenTask={handleTaskClick}
+      />
     </div>
   );
 };

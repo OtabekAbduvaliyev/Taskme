@@ -291,3 +291,44 @@ html::-webkit-scrollbar-thumb:hover {
 .ant-picker-clear {
   color: #ffffff !important; /* Tailwind gray-400 */
 }
+
+/* Calendar to Table Navigation Highlight */
+@keyframes calendar-pulse {
+  0%, 100% {
+    background-color: rgba(118, 88, 177, 0.2);
+    transform: scale(1);
+  }
+  50% {
+    background-color: rgba(118, 88, 177, 0.4);
+    transform: scale(1.01);
+  }
+}
+
+.calendar-highlight {
+  animation: calendar-pulse 0.6s ease-in-out 3;
+  position: relative;
+}
+
+.calendar-highlight::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: linear-gradient(
+    to bottom,
+    #7658B1,
+    #DC5091
+  );
+  animation: highlight-slide 0.6s ease-in-out 3;
+}
+
+@keyframes highlight-slide {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}

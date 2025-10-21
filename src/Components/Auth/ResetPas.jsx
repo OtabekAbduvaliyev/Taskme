@@ -1,13 +1,18 @@
-import React, { useContext, useState, useRef } from 'react'
+import React, { useContext, useState, useRef, useEffect } from 'react'
 import { AuthContext } from '../../Auth/AuthContext';
 
 const OTP_LENGTH = 6;
 
 const RestoreVerification = () => {
   const email = localStorage.getItem('email');
+  const token = localStorage.getItem('auth_verification_token');
   const [otpArr, setOtpArr] = useState(Array(OTP_LENGTH).fill(""));
   const { accountRestoreVerification, loading } = useContext(AuthContext);
   const inputRefs = useRef([]);
+
+  useEffect(() => {
+    inputRefs.current[0]?.focus();
+  }, []);
 
   const handleChange = (idx, value) => {
     if (!/^[0-9]?$/.test(value)) return;
@@ -36,7 +41,7 @@ const RestoreVerification = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    accountRestoreVerification({ otp: otpArr.join(""), email });
+    accountRestoreVerification({ otp: otpArr.join(""), email, token });
     setOtpArr(Array(OTP_LENGTH).fill(""));
   };
 

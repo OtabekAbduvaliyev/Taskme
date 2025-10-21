@@ -126,6 +126,7 @@ const AuthProvider = ({ children }) => {
     try {
       const response = await axiosInstance.post("/auth/restore", credentials);
       localStorage.setItem("email", credentials.email);
+      localStorage.setItem("auth_verification_token", response.data.token);
       console.log(response);
       setLoading(false);
       showToast("success", "We sent verification code to your account");

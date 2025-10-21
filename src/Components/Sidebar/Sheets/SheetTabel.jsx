@@ -805,6 +805,7 @@ const SheetTabel = ({
               {sortedTasksToRender.map((task) => (
                 <div
                   key={task.id}
+                  data-task-id={task.id}
                   // restore original base + hover pair: base=#23272F, hover=#2A2D36
                   className="bg-[#23272F] border border-[#2A2D36] rounded-lg p-3 flex items-start justify-between gap-3 hover:bg-[#2A2D36] transition-colors"
                 >
@@ -1135,7 +1136,11 @@ const SheetTabel = ({
                   {(provided) => (
                     <tbody ref={provided.innerRef} {...provided.droppableProps}>
                       {sortedTasksToRender?.map((task, index) => (
-                        <tr key={task.id} className="flex border-b border-black ">
+                        <tr 
+                          key={task.id} 
+                          data-task-id={task.id}
+                          className="flex border-b border-black"
+                        >
                           <SheetTableItem
                             task={task}
                             columns={visibleColumns}
